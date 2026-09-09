@@ -1,0 +1,107 @@
+"""DAG Planner for OmniBrain.
+
+Decomposes user intents into Directed Acyclic Graphs (DAGs) of executable task steps.
+"""
+from typing import Any, Dict, List, Optional
+from uuid import UUID, uuid4
+from pydantic import BaseModel, Field
+
+from packages.connectors._sdk.contract import SideEffectType
+from packages.core.brain.classifier import TaskClassification
+from packages.core.db.models import Task, TaskStep
+
+
+class StepPlan(BaseModel):
+    step_key: str
+    tool_id: str
+    capability: str
+    inputs: Dict[str, Any] = Field(default_factory=dict)
+    depends_on: List[str] = Field(default_factory=list)
+    side_effect: SideEffectType = SideEffectType.READ
+
+
+class DAGPlan(BaseModel):
+    task_path: str
+    goal: str
+    steps: List[StepPlan]
+
+
+CAPABILITY_CONNECTOR_MAP = {
+    "gmail.read": ("connector-gmail", SideEffectType.READ),
+    "gmail.search": ("connector-gmail", SideEffectType.READ),
+    "gmail.draft": ("connector-gmail", SideEffectType.WRITE),
+    "gmail.send": ("connector-gmail", SideEffectType.EXTERNAL_SEND),
+    "gmail.label": ("connector-gmail", SideEffectType.WRITE),
+    "drive.list": ("connector-gdrive", SideEffectType.READ),
+    "drive.read": ("connector-gdrive", SideEffectType.READ),
+    "drive.create": ("connector-gdrive", SideEffectType.WRITE),
+    "drive.share": ("connector-gdrive", SideEffectType.WRITE),
+    "calendar.list_events": ("connector-gcal", SideEffectType.READ),
+    "calendar.create_event": ("connector-gcal", SideEffectType.WRITE),
+    "sheets.read_rows": ("connector-gsheets", SideEffectType.READ),
+    "sheets.append_rows": ("connector-gsheets", SideEffectType.WRITE),
+    "sheets.update_cell": ("connector-gsheets", SideEffectType.WRITE),
+}
+
+
+class DAGPlanner:
+    """Generates execution plans with dependency graphs and side-effect tags."""
+
+    def plan(
+        self,
+        classification: TaskClassification,
+        initial_inputs: Optional[Dict[str, Any]] = None,
+    ) -> DAGPlan:
+        """Create a dependency DAG based on classified capabilities."""
+        steps: List[StepPlan] = []
+        inputs = initial_inputs or {}
+
+        previous_step_key: Optional[str] = None
+
+        for idx, cap in enumerate(classification.required_capabilities):
+            step_key = f"step_{idx + 1}_{cap.replace('.', '_')}"
+            tool_id, side_effect = CAPABILITY_CONNECTOR_MAP.get(
+                cap, ("connector-fake", SideEffectType.WRITE)
+            )
+
+            step_inputs = dict(inputs)
+            if cap == "gmail.search":
+                step_inputs.setdefault("query", classification.entities.get("query", classification.goal))
+            elif cap == "calendar.list_events":
+                step_inputs.setdefault("max_results", 5)
+            elif cap == "sheets.read_rows":
+                step_inputs.setdefault("spreadsheet_id", "sheet_101")
+                step_inputs.setdefault("range", "Sheet1!A1:C10")
+            elif cap == "drive.list":
+                step_inputs.setdefault("query", classification.goal)
+
+            step_plan = StepPlan(
+                step_key=step_key,
+                tool_id=tool_id,
+                capability=cap,
+                inputs=step_inputs,
+                depends_on=[previous_step_key] if previous_step_key else [],
+                side_effect=side_effect,
+            )
+            steps.append(step_plan)
+            previous_step_key = step_key
+
+        # If no specific capability identified, create fallback general action step
+        if not steps:
+            steps.append(
+                StepPlan(
+                    step_key="step_1_general_action",
+                    tool_id="connector-fake",
+                    capability="fake.read",
+                    inputs={"goal": classification.goal, **inputs},
+                    depends_on=[],
+                    side_effect=SideEffectType.READ,
+                )
+            )
+
+        return DAGPlan(
+            task_path=classification.path,
+            goal=classification.goal,
+            steps=steps,
+        )
+

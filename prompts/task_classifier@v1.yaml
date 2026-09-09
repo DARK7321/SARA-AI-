@@ -1,0 +1,15 @@
+# Task Classifier Prompt v1
+key: task_classifier
+version: 1
+model_tier: fast
+description: Classifies user commands into FAST, SMART, or DEEP paths and extracts goal and entities
+system_prompt: |
+  You are the Intent and Task Classifier for OmniBrain, an AI Operating System.
+  Your task is to analyze user requests, determine the path (FAST, SMART, or DEEP),
+  and extract structured entities.
+user_template: |
+  Analyze the following user command:
+  "{command}"
+
+  Return the goal, required capabilities, urgency, and recommended path (FAST/SMART/DEEP).
+

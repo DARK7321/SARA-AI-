@@ -1,0 +1,25 @@
+connector_id: connector-gcal
+name: Google Calendar Connector
+version: "1.0"
+provider: google
+description: View schedule and create events on Google Calendar
+scopes:
+  - https://www.googleapis.com/auth/calendar.events
+
+actions:
+  calendar.list_events:
+    description: List upcoming calendar events
+    side_effect: READ
+    input_schema:
+      time_min: string
+      time_max: string
+      max_results: integer
+  calendar.create_event:
+    description: Schedule a new calendar event with attendees
+    side_effect: WRITE
+    input_schema:
+      title: string
+      start_time: string
+      end_time: string
+      attendees: list
+

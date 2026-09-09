@@ -1,0 +1,42 @@
+connector_id: connector-gmail
+name: Google Gmail Connector
+version: "1.0"
+provider: google
+description: Read, search, label, draft, and send emails via Gmail API with verification
+scopes:
+  - https://www.googleapis.com/auth/gmail.modify
+
+actions:
+  gmail.read:
+    description: Read full content of an email by message ID
+    side_effect: READ
+    input_schema:
+      message_id: string
+  gmail.search:
+    description: Search inbox messages using Gmail query syntax
+    side_effect: READ
+    input_schema:
+      query: string
+      max_results: integer
+  gmail.draft:
+    description: Create a draft email in user's Gmail mailbox
+    side_effect: WRITE
+    input_schema:
+      to: string
+      subject: string
+      body: string
+  gmail.send:
+    description: Send an email directly to external recipient
+    side_effect: EXTERNAL_SEND
+    policy_effect: CONFIRM
+    input_schema:
+      to: string
+      subject: string
+      body: string
+  gmail.label:
+    description: Add or remove labels from a message
+    side_effect: WRITE
+    input_schema:
+      message_id: string
+      add_labels: list
+

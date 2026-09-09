@@ -1,0 +1,26 @@
+# Model routing configuration
+default_provider: gemini
+providers:
+  gemini:
+    enabled: true
+    models:
+      flash:
+        model_id: gemini-2.0-flash
+        tier: fast
+        use_for: [classification, simple_tasks, fast_path]
+      pro:
+        model_id: gemini-2.5-pro
+        tier: strong
+        use_for: [planning, complex_reasoning, deep_path]
+  ollama:
+    enabled: false
+    base_url: http://localhost:11434
+    models:
+      local:
+        model_id: llama3.2
+        tier: local
+        use_for: [private_data, offline_fallback]
+task_routing:
+  FAST: gemini.flash
+  SMART: gemini.flash
+  DEEP: gemini.pro

@@ -1,0 +1,30 @@
+connector_id: connector-gsheets
+name: Google Sheets Connector
+version: "1.0"
+provider: google
+description: Read, append rows, and update cells in Google Sheets with re-read verification
+scopes:
+  - https://www.googleapis.com/auth/spreadsheets
+
+actions:
+  sheets.read_rows:
+    description: Read a 2D range of cells from a spreadsheet
+    side_effect: READ
+    input_schema:
+      spreadsheet_id: string
+      range: string
+  sheets.append_rows:
+    description: Append rows of data to a spreadsheet table
+    side_effect: WRITE
+    input_schema:
+      spreadsheet_id: string
+      range: string
+      values: list
+  sheets.update_cell:
+    description: Update specific cell value in a spreadsheet
+    side_effect: WRITE
+    input_schema:
+      spreadsheet_id: string
+      cell: string
+      value: string
+

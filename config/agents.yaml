@@ -1,0 +1,27 @@
+# Agent configurations
+agents:
+  orchestrator:
+    description: Understands request, decides strategy, delegates
+    model_tier: strong
+    risk_ceiling: null
+    capabilities: [all]
+  research:
+    description: Web research, extraction, source comparison
+    model_tier: fast
+    risk_ceiling: LOW
+    capabilities: [web.search, web.fetch, docs.read]
+  communication:
+    description: Email, messaging, notifications, drafts
+    model_tier: fast
+    risk_ceiling: MEDIUM
+    capabilities: [email.*, chat.*, notify.*]
+  data:
+    description: Spreadsheets, databases, analysis
+    model_tier: fast
+    risk_ceiling: MEDIUM
+    capabilities: [sheets.*, db.read, data.transform]
+  file:
+    description: Documents, Drive, cloud storage
+    model_tier: fast
+    risk_ceiling: MEDIUM
+    capabilities: [drive.*, docs.*, files.*]

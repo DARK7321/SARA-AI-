@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OmniBrain — Talk to F.R.I.D.A.Y.</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <style>
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.15); opacity: 0.3; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+    .speaking-pulse {
+      animation: pulse-ring 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1);
+    }
+    .scrollbar-thin::-webkit-scrollbar {
+      width: 6px;
+    }
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+      background-color: #334155;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 flex flex-col h-screen font-sans">
+
+  <!-- Header -->
+  <header class="bg-slate-900/80 backdrop-blur border-b border-slate-800 px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center space-x-3">
+      <div id="avatarCircle" class="w-10 h-10 rounded-full bg-cyan-500/20 border border-cyan-400 flex items-center justify-center text-cyan-400">
+        <i class="fa-solid fa-brain text-xl"></i>
+      </div>
+      <div>
+        <div class="flex items-center space-x-2">
+          <h1 class="font-bold text-lg text-white tracking-wide">F.R.I.D.A.Y.</h1>
+          <span class="text-[10px] uppercase tracking-wider bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded border border-cyan-500/30">OmniBrain AI</span>
+        </div>
+        <p class="text-xs text-slate-400">Personal AI Operating System &bull; Autonomous Core</p>
+      </div>
+    </div>
+
+    <!-- Voice & Controls -->
+    <div class="flex items-center space-x-3">
+      <!-- Voice Toggle Button (Mute/Unmute) -->
+      <button id="voiceToggleBtn" onclick="toggleVoiceMute()" title="Click to mute or enable voice" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 text-xs font-medium hover:bg-emerald-500/20 transition-all cursor-pointer">
+        <i id="voiceToggleIcon" class="fa-solid fa-volume-high"></i>
+        <span id="voiceToggleText">Voice: ON</span>
+      </button>
+
+      <div class="flex items-center space-x-2 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700">
+        <i class="fa-solid fa-microphone text-cyan-400 text-xs"></i>
+        <select id="voiceSelect" class="bg-transparent text-xs text-white outline-none cursor-pointer">
+          <option value="auto" selected class="bg-slate-900 text-white">Auto (Hindi & English)</option>
+          <option value="hi-IN-SwaraNeural" class="bg-slate-900 text-white">Swara (Hindi Lady)</option>
+          <option value="en-US-JennyNeural" class="bg-slate-900 text-white">Jenny (English Lady)</option>
+        </select>
+      </div>
+
+      <div class="flex items-center space-x-2">
+        <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span class="text-xs text-emerald-400 font-medium">Online</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Chat Area -->
+  <main class="flex-1 flex flex-col max-w-4xl w-full mx-auto p-4 overflow-hidden">
+    
+    <!-- Messages Container -->
+    <div id="chatMessages" class="flex-1 overflow-y-auto space-y-4 p-4 scrollbar-thin">
+      
+      <!-- Welcome Message -->
+      <div class="flex items-start space-x-3">
+        <div class="w-8 h-8 rounded-full bg-cyan-500/20 border border-cyan-400/50 flex items-center justify-center text-cyan-300 shrink-0">
+          <i class="fa-solid fa-robot text-sm"></i>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl rounded-tl-none p-4 max-w-[80%] shadow-lg">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs font-semibold text-cyan-400">Friday</span>
+            <span class="text-[10px] text-slate-500">Just now</span>
+          </div>
+          <p class="text-sm text-slate-200 leading-relaxed">
+            Namaste! I am <strong>Friday</strong>, your personal AI assistant. All OmniBrain systems, policy engines, and Google connectors are online and operational. Aap mujhse Hindi ya English mein baat kar sakte hain!
+          </p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Preset Prompt Chips -->
+    <div class="py-2 flex flex-wrap gap-2">
+      <button onclick="sendQuickPrompt('Kaise ho Friday?')" class="text-xs bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700/80 px-3 py-1.5 rounded-full transition-all flex items-center space-x-1.5">
+        <i class="fa-regular fa-comment-dots text-cyan-400"></i>
+        <span>Kaise ho Friday?</span>
+      </button>
+      <button onclick="sendQuickPrompt('Tum kaun ho aur kya kar sakti ho?')" class="text-xs bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700/80 px-3 py-1.5 rounded-full transition-all flex items-center space-x-1.5">
+        <i class="fa-regular fa-user text-purple-400"></i>
+        <span>Tum kaun ho?</span>
+      </button>
+      <button onclick="sendQuickPrompt('Mere unread emails check karo')" class="text-xs bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700/80 px-3 py-1.5 rounded-full transition-all flex items-center space-x-1.5">
+        <i class="fa-regular fa-envelope text-indigo-400"></i>
+        <span>Emails check karo</span>
+      </button>
+      <button onclick="sendQuickPrompt('Check my calendar events for today')" class="text-xs bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700/80 px-3 py-1.5 rounded-full transition-all flex items-center space-x-1.5">
+        <i class="fa-regular fa-calendar-check text-emerald-400"></i>
+        <span>Check Calendar</span>
+      </button>
+      <button onclick="sendQuickPrompt('List files in my Google Drive')" class="text-xs bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700/80 px-3 py-1.5 rounded-full transition-all flex items-center space-x-1.5">
+        <i class="fa-brands fa-google-drive text-amber-400"></i>
+        <span>Drive files</span>
+      </button>
+    </div>
+
+    <!-- Input Bar -->
+    <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-2.5 flex items-center space-x-2 shadow-2xl backdrop-blur">
+      <button id="micBtn" onclick="toggleSpeechRecognition()" title="Voice Input" class="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-all">
+        <i class="fa-solid fa-microphone text-base"></i>
+      </button>
+
+      <input 
+        id="userInput" 
+        type="text" 
+        placeholder="Type or speak a message or command (Hindi / English)..." 
+        class="flex-1 bg-transparent px-3 py-2 text-sm text-white placeholder-slate-500 outline-none"
+        onkeydown="if(event.key === 'Enter') handleSend()"
+      />
+
+      <!-- Stop Speaking Button (Visible only while speaking) -->
+      <button id="stopSpeakingBtn" onclick="stopSpeaking()" title="Stop Speaking (Esc)" class="hidden bg-rose-500 hover:bg-rose-600 text-white px-3.5 py-2 rounded-xl text-xs font-semibold items-center space-x-1.5 transition-all shadow-lg shadow-rose-500/30 cursor-pointer animate-pulse">
+        <i class="fa-solid fa-stop text-xs"></i>
+        <span>Stop</span>
+      </button>
+
+      <button id="sendBtn" onclick="handleSend()" class="bg-cyan-500 hover:bg-cyan-400 text-slate-950 px-5 py-2 rounded-xl text-sm font-semibold flex items-center space-x-2 transition-all shadow-lg shadow-cyan-500/20">
+        <span>Send</span>
+        <i class="fa-solid fa-arrow-up text-xs"></i>
+      </button>
+    </div>
+  </main>
+
+  <script>
+    const API_URL = "http://localhost:8000";
+    let authToken = null;
+    let isListening = false;
+    let recognition = null;
+    let currentAudio = null;
+
+    // Initialize Speech Recognition if supported
+    if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
+      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognition = new SpeechRec();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        document.getElementById("userInput").value = transcript;
+        toggleSpeechRecognition();
+        handleSend();
+      };
+
+      recognition.onerror = () => {
+        toggleSpeechRecognition();
+      };
+      recognition.onend = () => {
+        isListening = false;
+        updateMicUi();
+      };
+    }
+
+    function toggleSpeechRecognition() {
+      if (!recognition) {
+        alert("Speech recognition is not supported in this browser. Please type your message.");
+        return;
+      }
+      if (isListening) {
+        recognition.stop();
+        isListening = false;
+      } else {
+        const lang = document.getElementById("voiceSelect").value.startsWith("hi") ? "hi-IN" : "en-US";
+        recognition.lang = lang;
+        recognition.start();
+        isListening = true;
+      }
+      updateMicUi();
+    }
+
+    function updateMicUi() {
+      const btn = document.getElementById("micBtn");
+      if (isListening) {
+        btn.classList.add("bg-red-500", "text-white", "animate-pulse");
+        btn.classList.remove("bg-slate-800", "text-slate-300");
+      } else {
+        btn.classList.remove("bg-red-500", "text-white", "animate-pulse");
+        btn.classList.add("bg-slate-800", "text-slate-300");
+      }
+    }
+
+    async function login() {
+      const formData = new URLSearchParams();
+      formData.append("username", "admin@omnibrain.local");
+      formData.append("password", "OmniBrain@2026");
+
+      const res = await fetch(`${API_URL}/v1/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: formData,
+      });
+      const data = await res.json();
+      authToken = data.data.access_token;
+      return authToken;
+    }
+
+    function sendQuickPrompt(text) {
+      document.getElementById("userInput").value = text;
+      handleSend();
+    }
+
+    function appendUserMessage(text) {
+      const container = document.getElementById("chatMessages");
+      const msgDiv = document.createElement("div");
+      msgDiv.className = "flex items-start justify-end space-x-3";
+      msgDiv.innerHTML = `
+        <div class="bg-cyan-600/90 text-white rounded-2xl rounded-tr-none p-4 max-w-[80%] shadow-lg">
+          <div class="flex items-center justify-end mb-1 space-x-2">
+            <span class="text-[10px] text-cyan-200">You</span>
+          </div>
+          <p class="text-sm leading-relaxed">${escapeHtml(text)}</p>
+        </div>
+        <div class="w-8 h-8 rounded-full bg-cyan-700 flex items-center justify-center text-white shrink-0">
+          <i class="fa-solid fa-user text-sm"></i>
+        </div>
+      `;
+      container.appendChild(msgDiv);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function appendAssistantMessage(data) {
+      const container = document.getElementById("chatMessages");
+      const msgDiv = document.createElement("div");
+      msgDiv.className = "flex items-start space-x-3";
+
+      let reportHtml = "";
+      if (data.report) {
+        const r = data.report;
+        reportHtml = `
+          <div class="mt-3 bg-slate-950/80 border border-slate-800 rounded-xl p-3 text-xs space-y-2">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+              <span class="font-semibold text-slate-300">📋 Standard 5-Point Report</span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold ${r.status === 'COMPLETED' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'}">${r.status}</span>
+            </div>
+            ${r.what_was_done && r.what_was_done.length ? `<div><span class="text-slate-400 font-medium">WHAT WAS DONE:</span><ul class="list-disc list-inside text-slate-300 ml-1 mt-0.5 space-y-0.5">${r.what_was_done.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>` : ''}
+            ${r.important_results && r.important_results.length ? `<div><span class="text-slate-400 font-medium">IMPORTANT RESULTS:</span><ul class="list-disc list-inside text-cyan-300 ml-1 mt-0.5 space-y-0.5">${r.important_results.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>` : ''}
+            ${r.any_problems && r.any_problems.length ? `<div><span class="text-rose-400 font-medium">PROBLEMS:</span><ul class="list-disc list-inside text-rose-300 ml-1 mt-0.5 space-y-0.5">${r.any_problems.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>` : ''}
+            ${r.actions_requiring_me && r.actions_requiring_me.length ? `<div><span class="text-amber-400 font-medium">ACTIONS REQUIRING YOU:</span><ul class="list-disc list-inside text-amber-300 ml-1 mt-0.5 space-y-0.5">${r.actions_requiring_me.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>` : ''}
+          </div>
+        `;
+      }
+
+      msgDiv.innerHTML = `
+        <div class="w-8 h-8 rounded-full bg-cyan-500/20 border border-cyan-400/50 flex items-center justify-center text-cyan-300 shrink-0">
+          <i class="fa-solid fa-robot text-sm"></i>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl rounded-tl-none p-4 max-w-[80%] shadow-lg">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs font-semibold text-cyan-400">Friday</span>
+            ${data.audio_base64 ? `<button onclick="playVoice('${data.audio_base64}')" class="text-[11px] bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 px-2.5 py-0.5 rounded-full flex items-center space-x-1.5 transition-all shadow-sm"><i class="fa-solid fa-volume-high"></i><span>🔊 Listen / Replay</span></button>` : ''}
+          </div>
+          <p class="text-sm text-slate-200 leading-relaxed">${escapeHtml(data.reply || "")}</p>
+          ${reportHtml}
+        </div>
+      `;
+      container.appendChild(msgDiv);
+      container.scrollTop = container.scrollHeight;
+
+      if (data.audio_base64) {
+        playVoice(data.audio_base64);
+      }
+    }
+
+    let isVoiceEnabled = true;
+
+    function toggleVoiceMute() {
+      isVoiceEnabled = !isVoiceEnabled;
+      const btn = document.getElementById("voiceToggleBtn");
+      const icon = document.getElementById("voiceToggleIcon");
+      const text = document.getElementById("voiceToggleText");
+
+      if (isVoiceEnabled) {
+        btn.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 text-xs font-medium hover:bg-emerald-500/20 transition-all cursor-pointer";
+        icon.className = "fa-solid fa-volume-high";
+        text.innerText = "Voice: ON";
+      } else {
+        stopSpeaking();
+        btn.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-300 text-xs font-medium hover:bg-rose-500/20 transition-all cursor-pointer";
+        icon.className = "fa-solid fa-volume-xmark";
+        text.innerText = "Muted (OFF)";
+      }
+    }
+
+    function stopSpeaking() {
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+      }
+      const avatar = document.getElementById("avatarCircle");
+      if (avatar) avatar.classList.remove("speaking-pulse");
+      const stopBtn = document.getElementById("stopSpeakingBtn");
+      if (stopBtn) stopBtn.classList.add("hidden");
+    }
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        stopSpeaking();
+      }
+    });
+
+    function playVoice(base64Audio) {
+      if (!isVoiceEnabled || !base64Audio) return;
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+      }
+      const avatar = document.getElementById("avatarCircle");
+      if (avatar) avatar.classList.add("speaking-pulse");
+      const stopBtn = document.getElementById("stopSpeakingBtn");
+      if (stopBtn) stopBtn.classList.remove("hidden");
+
+      currentAudio = new Audio("data:audio/mp3;base64," + base64Audio);
+      currentAudio.play().catch(e => console.log("Audio autoplay prevented:", e));
+      currentAudio.onended = () => {
+        if (avatar) avatar.classList.remove("speaking-pulse");
+        if (stopBtn) stopBtn.classList.add("hidden");
+      };
+      currentAudio.onerror = () => {
+        if (avatar) avatar.classList.remove("speaking-pulse");
+        if (stopBtn) stopBtn.classList.add("hidden");
+      };
+    }
+
+    async function handleSend() {
+      const input = document.getElementById("userInput");
+      const msg = input.value.trim();
+      if (!msg) return;
+
+      input.value = "";
+      appendUserMessage(msg);
+
+      // Loading state
+      const btn = document.getElementById("sendBtn");
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i><span>Thinking...</span>`;
+
+      try {
+        if (!authToken) {
+          await login();
+        }
+
+        const voice = document.getElementById("voiceSelect").value;
+        const res = await fetch(`${API_URL}/v1/chat`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${authToken}`,
+          },
+          body: jsonSafe({
+            message: msg,
+            include_audio: isVoiceEnabled,
+            voice: voice,
+          }),
+        });
+
+        if (!res.ok) {
+          if (res.status === 401) {
+            await login();
+            return handleSend();
+          }
+          throw new Error(`Server returned ${res.status}`);
+        }
+
+        const body = await res.json();
+        appendAssistantMessage(body.data);
+
+      } catch (err) {
+        alert("Error communicating with OmniBrain API: " + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<span>Send</span><i class="fa-solid fa-arrow-up text-xs"></i>`;
+      }
+    }
+
+    function escapeHtml(str) {
+      return (str || '').replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+      }[m]));
+    }
+
+    function jsonSafe(obj) {
+      return JSON.stringify(obj);
+    }
+  </script>
+</body>
+</html>
+

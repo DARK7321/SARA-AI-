@@ -1,0 +1,36 @@
+connector_id: connector-gdrive
+name: Google Drive Connector
+version: "1.0"
+provider: google
+description: List, read, create, and share files in Google Drive
+scopes:
+  - https://www.googleapis.com/auth/drive.file
+
+actions:
+  drive.list:
+    description: List files in Google Drive matching query
+    side_effect: READ
+    input_schema:
+      query: string
+      max_results: integer
+  drive.read:
+    description: Read file metadata and content
+    side_effect: READ
+    input_schema:
+      file_id: string
+  drive.create:
+    description: Create a new file or folder in Google Drive
+    side_effect: WRITE
+    input_schema:
+      name: string
+      mime_type: string
+      content: string
+  drive.share:
+    description: Share a file with an email address
+    side_effect: WRITE
+    policy_effect: CONFIRM
+    input_schema:
+      file_id: string
+      email: string
+      role: string
+

@@ -1,0 +1,11 @@
+# Feature flags - risky flags default OFF
+flags:
+  MULTI_AGENT: false
+  AUTOPILOT: false
+  PROACTIVE_MODE: false
+  BROWSER_AGENT: false
+  SELF_LEARNING: false
+  NEW_MODEL_ROUTER: false
+  NL_WORKFLOW_BUILDER: false
+  MCP_BRIDGE: false
+  VOICE_INPUT: false

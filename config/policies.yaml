@@ -1,0 +1,24 @@
+# Policy engine rules v1
+version: 1
+default_autonomy_level: 2  # APPROVE
+rules:
+  - id: deny_destructive_without_approval
+    description: Destructive actions always need confirmation
+    condition:
+      side_effect: DESTRUCTIVE
+    effect: CONFIRM
+  - id: deny_external_send_without_approval
+    description: External sends need confirmation
+    condition:
+      side_effect: EXTERNAL_SEND
+    effect: CONFIRM
+  - id: allow_read_operations
+    description: Read operations are auto-allowed
+    condition:
+      side_effect: [NONE, READ]
+    effect: ALLOW
+  - id: deny_over_budget
+    description: Deny if budget exceeded
+    condition:
+      budget_exceeded: true
+    effect: DENY
