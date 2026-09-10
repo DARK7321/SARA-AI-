@@ -5,13 +5,11 @@ providers:
     enabled: true
     models:
       flash:
-        model_id: gemini-3.6-flash
         model_id: gemini-3.5-flash-lite
         tier: fast
         use_for: [classification, simple_tasks, fast_path]
       pro:
-        model_id: gemini-3.6-flash
-        model_id: gemini-3.5-flash
+        model_id: gemini-3.8-flash
         tier: strong
         use_for: [planning, complex_reasoning, deep_path]
   ollama:
