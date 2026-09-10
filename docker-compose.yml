@@ -1,4 +1,4 @@
-version: '3.8'
+
 
 
 services:
@@ -37,6 +37,7 @@ services:
     env_file: .env
     volumes:
       - .:/app
+      - /app/.git
     depends_on:
       postgres:
         condition: service_healthy
