@@ -75,9 +75,19 @@ class VoiceEngine:
             if not selected_voice.startswith("hi-"):
                 selected_voice = DEFAULT_HINGLISH_VOICE
 
+        communicate = edge_tts.Communicate(
+            text=spoken_text,
+            voice=selected_voice,
+            rate=applied_rate,
+            pitch=applied_pitch,
+        )
         if not spoken_text.strip():
             return b""
 
+        audio_stream = io.BytesIO()
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio_stream.write(chunk["data"])
         try:
             communicate = edge_tts.Communicate(
                 text=spoken_text,
@@ -86,6 +96,7 @@ class VoiceEngine:
                 pitch=applied_pitch,
             )
 
+        return audio_stream.getvalue()
             audio_stream = io.BytesIO()
             async for chunk in communicate.stream():
                 if chunk["type"] == "audio":
@@ -103,6 +114,8 @@ class VoiceEngine:
         pitch: str = "+0Hz",
     ) -> str:
         """Synthesize text into a base64 MP3 data string ready for browser/client playback."""
+        audio_bytes = await self.synthesize_to_bytes(text=text, voice=voice, rate=rate, pitch=pitch)
+        return base64.b64encode(audio_bytes).decode("utf-8")
         try:
             audio_bytes = await self.synthesize_to_bytes(text=text, voice=voice, rate=rate, pitch=pitch)
             return base64.b64encode(audio_bytes).decode("utf-8") if audio_bytes else ""
