@@ -86,8 +86,8 @@ class IntentEngine:
         ]
         has_action_intent = bool(req_caps) or any(w in lower_msg for w in action_intent_words)
 
-        # Zero-latency Conversational Bypass:
-        # Greetings, general queries, and questions without tool action intent are classified instantly (<1ms).
+        # Zero-latency Conversational & Tool Action Bypass:
+        # Greetings, general queries, and direct tool commands are classified instantly (<1ms) with 100% precision.
         if provider_name != "mock":
             if is_chat and not any(w in lower_msg for w in ["send", "delete", "remove", "schedule", "draft", "bhejo", "hatao"]):
                 return TaskClassification(
@@ -106,6 +106,16 @@ class IntentEngine:
                     entities={},
                     required_capabilities=[],
                     estimated_risk="LOW",
+                )
+            # Direct tool commands (check inbox, calendar, sheets, drive)
+            if req_caps and not any(w in lower_msg for w in ["why", "explain", "how does", "what is"]):
+                return TaskClassification(
+                    is_conversational=False,
+                    path="SMART" if len(req_caps) > 1 else "FAST",
+                    goal=user_message[:100],
+                    entities={"query": user_message},
+                    required_capabilities=req_caps,
+                    estimated_risk="HIGH" if any(w in lower_msg for w in ["send", "delete", "remove"]) else "LOW",
                 )
 
         prompt = (

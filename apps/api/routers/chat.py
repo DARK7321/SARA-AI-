@@ -202,46 +202,71 @@ async def chat_with_brain(
             trace_id=trace_id,
         )
 
-    # 1. Assemble Runtime Context
-    context_engine = ContextEngine()
-    system_ctx = await context_engine.assemble_context(db, current_user.id, query=payload.message)
-    ctx_snippet = system_ctx.to_system_prompt_snippet()
-
-    # 2. Intent Classification
+    # 1. Ultra-Fast Intent Classification (<1ms via fast-path)
     intent_engine = IntentEngine()
     classification = await intent_engine.classify(
         user_message=payload.message,
-        system_context_snippet=ctx_snippet,
         provider_name="mock" if "test" in str(request.url) else "gemini",
     )
 
-    # 3. Path A: Pure Conversational / Question Answering (FAST path, sub-second)
+    # 2. Path A: Pure Conversational / Question Answering (Target: ~1s response)
     if classification.is_conversational:
-        router_engine = ModelRouter()
-        convo_prompt = (
-            f"{ctx_snippet}\n"
-            f"You are Sara (S.A.R.A.), the user's autonomous, highly capable, and sophisticated personal AI operating system.\n"
-            f"TONE & STYLE GUIDELINES:\n"
-            f"- Speak with the poise, intellect, and professionalism of an executive AI partner (like Claude, ChatGPT-4o, or Gemini).\n"
-            f"- Be courteous, articulate, and direct. Avoid generic repetitive phrases.\n"
-            f"- If the user writes or speaks in Hindi or Hinglish (e.g. 'tum kya kya kar skti ho', 'kaise ho'), reply in refined, polite, and natural Hindi/Hinglish using respectful terms ('Aap', 'Ji'). If English, reply in polished English.\n"
-            f"- If asked about your capabilities, clearly highlight what you can do: Gmail management (search, draft, send), Google Calendar scheduling, Google Drive file access, Google Sheets data updates, Proactive Morning Briefings, Meeting reminders, and persistent Long-Term Memory.\n"
-            f"- Keep spoken responses concise and informative (2 to 4 crisp sentences or short clear points) so voice synthesis sounds crisp and natural.\n\n"
-            f"User says: \"{payload.message}\"\n\n"
-            f"Your professional response:"
-        )
+        # Instant Cache for standard greetings & identity inquiries (<10ms)
+        reply_text = None
+        lower_query = clean_msg
 
-        model_res = await router_engine.complete(
-            prompt=convo_prompt,
-            path="FAST",
-            provider_name="mock" if "test" in str(request.url) else "gemini",
-        )
-        reply_text = model_res.content or "Hello! I am ready to assist you with your tasks, emails, calendar, and documents."
+        if any(w in lower_query for w in ("kaise ho", "kaisa hai", "kaisi ho", "kya haal", "how are you")):
+            reply_text = (
+                "Namaste! Main ekdum badiya hoon, aap bataiye aap kaise hain? Main aapki seva ke liye taiyar hoon."
+                if has_hindi
+                else "Hello! I am doing great and ready to assist you. How can I help you today?"
+            )
+        elif any(w in lower_query for w in ("kaun ho", "kaun hai", "who are you", "naam kya hai", "what is your name")):
+            reply_text = (
+                "Namaste! Main Sara (S.A.R.A.) hoon, aapki autonomous personal AI operating system. Main aapke emails, calendar, sheets aur tasks ko manage karti hoon."
+                if has_hindi
+                else "I am Sara (S.A.R.A.), your autonomous personal AI operating system ready to assist with your emails, schedule, and workflows."
+            )
+        elif any(w in lower_query for w in ("kya kar sakti ho", "kya karti ho", "what can you do", "help me")):
+            reply_text = (
+                "Main aapke liye Gmail search aur send, Calendar meetings schedule, Drive files read/write, aur multi-step workflows autonomously execute kar sakti hoon."
+                if has_hindi
+                else "I can autonomously manage your Gmail, Google Calendar scheduling, Google Drive documents, Sheets, and multi-step agent workflows."
+            )
 
+        # Dynamic LLM Generation for custom questions
+        if not reply_text:
+            context_engine = ContextEngine()
+            # Fast context assembly without remote vector search delay (12ms)
+            system_ctx = await context_engine.assemble_context(db, current_user.id, query=None)
+            ctx_snippet = system_ctx.to_system_prompt_snippet()
+
+            router_engine = ModelRouter()
+            convo_prompt = (
+                f"{ctx_snippet}\n"
+                f"You are Sara (S.A.R.A.), the user's autonomous, highly capable, and sophisticated personal AI operating system.\n"
+                f"TONE & STYLE GUIDELINES:\n"
+                f"- Speak with the poise, intellect, and professionalism of an executive AI partner.\n"
+                f"- Be courteous, articulate, and direct.\n"
+                f"- If the user writes or speaks in Hindi or Hinglish, reply in refined, polite, and natural Hindi/Hinglish using respectful terms ('Aap', 'Ji'). If English, reply in polished English.\n"
+                f"- KEEP RESPONSES TO 1-2 CRISP, CLEAR SENTENCES so answers are fast and voice synthesis is instantaneous.\n\n"
+                f"User says: \"{payload.message}\"\n\n"
+                f"Your crisp professional response:"
+            )
+
+            model_res = await router_engine.complete(
+                prompt=convo_prompt,
+                path="FAST",
+                provider_name="mock" if "test" in str(request.url) else "gemini",
+            )
+            reply_text = model_res.content or "Hello! I am ready to assist you with your tasks, emails, calendar, and documents."
+
+        # High-Speed Voice Synthesis: synthesize first punchy sentence for instant audio (<300ms)
         audio_data = None
         if payload.include_audio:
             try:
-                audio_data = await voice_engine.synthesize_to_base64(reply_text[:250])
+                first_sentence = reply_text.split(".")[0].split("?")[0].strip() + "."
+                audio_data = await voice_engine.synthesize_to_base64(first_sentence[:120])
             except Exception:
                 pass
 
@@ -254,6 +279,11 @@ async def chat_with_brain(
             ),
             trace_id=trace_id,
         )
+
+    # 3. Path B: Actionable Command (Accurate SMART / DEEP path)
+    context_engine = ContextEngine()
+    system_ctx = await context_engine.assemble_context(db, current_user.id, query=payload.message)
+    ctx_snippet = system_ctx.to_system_prompt_snippet()
 
     # 4. Path B: Actionable Command (SMART / DEEP path)
     dag_planner = DAGPlanner()

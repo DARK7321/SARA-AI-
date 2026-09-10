@@ -75,19 +75,9 @@ class VoiceEngine:
             if not selected_voice.startswith("hi-"):
                 selected_voice = DEFAULT_HINGLISH_VOICE
 
-        communicate = edge_tts.Communicate(
-            text=spoken_text,
-            voice=selected_voice,
-            rate=applied_rate,
-            pitch=applied_pitch,
-        )
         if not spoken_text.strip():
             return b""
 
-        audio_stream = io.BytesIO()
-        async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                audio_stream.write(chunk["data"])
         try:
             communicate = edge_tts.Communicate(
                 text=spoken_text,
@@ -96,7 +86,6 @@ class VoiceEngine:
                 pitch=applied_pitch,
             )
 
-        return audio_stream.getvalue()
             audio_stream = io.BytesIO()
             async for chunk in communicate.stream():
                 if chunk["type"] == "audio":
