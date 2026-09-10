@@ -26,6 +26,9 @@ class ModelRouter:
             "FAST": "gemini-3.6-flash",
             "SMART": "gemini-3.6-flash",
             "DEEP": "gemini-3.6-flash",
+            "FAST": "gemini-3.5-flash-lite",
+            "SMART": "gemini-3.5-flash-lite",
+            "DEEP": "gemini-3.5-flash",
         }
         self._initialize()
 
@@ -44,8 +47,10 @@ class ModelRouter:
                     for path, target in routing.items():
                         if "flash" in target:
                             self.task_routing[path] = "gemini-3.6-flash"
+                            self.task_routing[path] = "gemini-3.5-flash-lite"
                         elif "pro" in target:
                             self.task_routing[path] = "gemini-3.6-flash"
+                            self.task_routing[path] = "gemini-3.5-flash"
             except Exception:
                 pass
 

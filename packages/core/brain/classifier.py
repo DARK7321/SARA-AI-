@@ -57,6 +57,57 @@ class IntentEngine:
         provider_name: str = "gemini",
     ) -> TaskClassification:
         """Classify message intent and extract parameters."""
+        """Classify message intent and extract parameters with sub-millisecond fast-path."""
+        lower_msg = user_message.lower().strip()
+        hindi_chat_phrases = [
+            "namaste", "namaskar", "kaise", "kaisa", "kaisi", "haal", "hal",
+            "kaun ho", "kaun hai", "who are you", "kya kar", "kya haal",
+            "theek", "shukriya", "dhanyawad", "batao", "bolo", "kaho", "shuru",
+            "slow", "kyu", "q hai", "kyon", "tez", "fast", "aawaz", "voice",
+            "नमस्ते", "नमस्कार", "कैसी", "कैसे", "कौन", "हाल", "क्या", "हाय", "हेलो", "शुक्रिया", "धन्यवाद"
+        ]
+        is_chat = any(w in lower_msg for w in ["hello", "hi", "hey", "who are you", "what can you do", "help"] + hindi_chat_phrases)
+
+        req_caps = []
+        if any(w in lower_msg for w in ["mail", "inbox", "email", "ईमेल", "मेल"]):
+            req_caps.append("gmail.search")
+        if any(w in lower_msg for w in ["meeting", "calendar", "schedule", "कैलेंडर", "मीटिंग"]):
+            req_caps.append("calendar.list_events")
+        if any(w in lower_msg for w in ["sheet", "spreadsheet", "शीट"]):
+            req_caps.append("sheets.read_rows")
+        if any(w in lower_msg for w in ["drive", "file", "doc", "ड्राइव", "फाइल"]):
+            req_caps.append("drive.list")
+
+        # Action verbs indicating tool execution intent
+        action_intent_words = [
+            "send", "draft", "create", "delete", "remove", "schedule", "update", "append",
+            "search inbox", "check mail", "read mail", "check calendar", "bhejo", "banao",
+            "likho", "karo", "hatao", "dhundo"
+        ]
+        has_action_intent = bool(req_caps) or any(w in lower_msg for w in action_intent_words)
+
+        # Zero-latency Conversational Bypass:
+        # Greetings, general queries, and questions without tool action intent are classified instantly (<1ms).
+        if provider_name != "mock":
+            if is_chat and not any(w in lower_msg for w in ["send", "delete", "remove", "schedule", "draft", "bhejo", "hatao"]):
+                return TaskClassification(
+                    is_conversational=True,
+                    path="FAST",
+                    goal=user_message[:100],
+                    entities={},
+                    required_capabilities=[],
+                    estimated_risk="LOW",
+                )
+            if not has_action_intent:
+                return TaskClassification(
+                    is_conversational=True,
+                    path="FAST",
+                    goal=user_message[:100],
+                    entities={},
+                    required_capabilities=[],
+                    estimated_risk="LOW",
+                )
+
         prompt = (
             f"{system_context_snippet}\n"
             f"User Message: \"{user_message}\"\n\n"

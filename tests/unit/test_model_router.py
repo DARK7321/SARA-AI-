@@ -35,6 +35,7 @@ async def test_model_router_completion():
     )
     assert res.content is not None
     assert res.model == "gemini-3.6-flash"
+    assert res.model == "gemini-3.5-flash-lite"
     assert res.provider == "mock"
 
 
@@ -74,5 +75,6 @@ async def test_model_router_telemetry_logging(db_session):
     run_record = result.scalar_one_or_none()
     assert run_record is not None
     assert run_record.model == "gemini-3.6-flash"
+    assert run_record.model == "gemini-3.5-flash-lite"
     assert run_record.valid_output is True
 

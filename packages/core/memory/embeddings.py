@@ -72,7 +72,9 @@ class EmbeddingService:
                 import google.generativeai as genai
                 result = genai.embed_content(
                     model="models/text-embedding-004",
+                    model="models/gemini-embedding-001",
                     content=text,
+                    output_dimensionality=EMBEDDING_DIM,
                     task_type="retrieval_document",
                 )
                 if "embedding" in result and result["embedding"]:

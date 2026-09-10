@@ -40,6 +40,7 @@ class GeminiProvider(BaseModelProvider):
             )
 
         model_id = model_name or "gemini-3.6-flash"
+        model_id = model_name or "gemini-3.5-flash-lite"
         start_time = time.time()
 
         generation_config = genai.types.GenerationConfig(

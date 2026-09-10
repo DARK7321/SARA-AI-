@@ -17,3 +17,4 @@ coverage/
 htmlcov/
 .idea/
 .vscode/settings.json
+data/
