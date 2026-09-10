@@ -3,10 +3,13 @@
 Enables natural conversation, question answering, and direct multi-step task execution
 with optional Lady Assistant voice output.
 """
+import asyncio
 import base64
+import json as json_lib
 from typing import Any, Dict, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -358,4 +361,227 @@ async def chat_with_brain(
             audio_base64=audio_data,
         ),
         trace_id=trace_id,
+    )
+
+
+# ============================================================================
+# SSE Streaming Endpoint — Real-time token-by-token response delivery
+# ============================================================================
+
+def _sse_event(event_type: str, content: str = "", **kwargs) -> str:
+    """Format a Server-Sent Event data line."""
+    payload = {"type": event_type, "content": content, **kwargs}
+    return f"data: {json_lib.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+@router.post("/stream")
+async def chat_stream(
+    payload: ChatRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Stream Sara's response token-by-token via Server-Sent Events (SSE)."""
+    trace_id = getattr(request.state, "trace_id", None)
+
+    # Voice & Language detection (same as non-streaming endpoint)
+    has_hindi = any("\u0900" <= char <= "\u097F" for char in payload.message) or any(
+        kw in payload.message.lower().split()
+        for kw in ["kaise", "kya", "namaste", "tum", "aap", "mera", "meri", "hai", "karo", "kaho", "batao", "shuru", "theek", "bhai", "bat", "baat"]
+    )
+    selected_voice = payload.voice
+    user_pref_voice = (current_user.settings or {}).get("active_voice") if current_user else None
+    if selected_voice == "custom_clone" or (not selected_voice and user_pref_voice == "custom_clone"):
+        selected_voice = "custom_clone"
+    elif not selected_voice or selected_voice == "auto":
+        selected_voice = DEFAULT_HINGLISH_VOICE if has_hindi else DEFAULT_LADY_VOICE
+    elif has_hindi and not selected_voice.startswith("hi-") and selected_voice != "custom_clone":
+        selected_voice = DEFAULT_HINGLISH_VOICE
+
+    voice_engine = VoiceEngine(default_voice=selected_voice)
+    clean_msg = payload.message.strip().lower()
+
+    async def event_generator():
+        """Async generator that yields SSE events."""
+        # 1. Classify intent (instant via fast-path)
+        yield _sse_event("status", "classifying...")
+        intent_engine = IntentEngine()
+        classification = await intent_engine.classify(
+            user_message=payload.message,
+            provider_name="gemini",
+        )
+
+        # 2A. Conversational Path — stream reply tokens
+        if classification.is_conversational:
+            yield _sse_event("status", "replying...")
+
+            # Check instant cache first
+            cached_reply = None
+            if any(w in clean_msg for w in ("kaise ho", "kaisa hai", "kaisi ho", "kya haal", "how are you")):
+                cached_reply = (
+                    "Namaste! Main ekdum badiya hoon, aap bataiye aap kaise hain? Main aapki seva ke liye taiyar hoon."
+                    if has_hindi
+                    else "Hello! I am doing great and ready to assist you. How can I help you today?"
+                )
+            elif any(w in clean_msg for w in ("kaun ho", "kaun hai", "who are you", "naam kya hai", "what is your name")):
+                cached_reply = (
+                    "Namaste! Main Sara (S.A.R.A.) hoon, aapki autonomous personal AI operating system. Main aapke emails, calendar, sheets aur tasks ko manage karti hoon."
+                    if has_hindi
+                    else "I am Sara (S.A.R.A.), your autonomous personal AI operating system ready to assist with your emails, schedule, and workflows."
+                )
+            elif any(w in clean_msg for w in ("kya kar sakti ho", "kya karti ho", "what can you do", "help me")):
+                cached_reply = (
+                    "Main aapke liye Gmail search aur send, Calendar meetings schedule, Drive files read/write, aur multi-step workflows autonomously execute kar sakti hoon."
+                    if has_hindi
+                    else "I can autonomously manage your Gmail, Google Calendar scheduling, Google Drive documents, Sheets, and multi-step agent workflows."
+                )
+
+            if cached_reply:
+                # Stream cached reply word-by-word for natural typing effect
+                words = cached_reply.split(" ")
+                for i, word in enumerate(words):
+                    token = word if i == 0 else " " + word
+                    yield _sse_event("token", token)
+                    await asyncio.sleep(0.02)  # 20ms between words for natural feel
+                full_text = cached_reply
+            else:
+                # Stream LLM response token-by-token from Gemini
+                context_engine = ContextEngine()
+                system_ctx = await context_engine.assemble_context(db, current_user.id, query=None)
+                ctx_snippet = system_ctx.to_system_prompt_snippet()
+
+                convo_prompt = (
+                    f"{ctx_snippet}\n"
+                    f"You are Sara (S.A.R.A.), the user's autonomous, highly capable, and sophisticated personal AI operating system.\n"
+                    f"TONE & STYLE GUIDELINES:\n"
+                    f"- Speak with the poise, intellect, and professionalism of an executive AI partner.\n"
+                    f"- Be courteous, articulate, and direct.\n"
+                    f"- If the user writes or speaks in Hindi or Hinglish, reply in refined, polite, and natural Hindi/Hinglish using respectful terms ('Aap', 'Ji'). If English, reply in polished English.\n"
+                    f"- KEEP RESPONSES TO 1-2 CRISP, CLEAR SENTENCES so answers are fast and voice synthesis is instantaneous.\n\n"
+                    f"User says: \"{payload.message}\"\n\n"
+                    f"Your crisp professional response:"
+                )
+
+                router_engine = ModelRouter()
+                full_text = ""
+                try:
+                    async for chunk in router_engine.stream(
+                        prompt=convo_prompt,
+                        path="FAST",
+                        system_prompt=None,
+                        provider_name="gemini",
+                    ):
+                        full_text += chunk
+                        yield _sse_event("token", chunk)
+                except Exception:
+                    if not full_text:
+                        full_text = "Hello! I am Sara, ready to assist you."
+                        yield _sse_event("token", full_text)
+
+            # Audio synthesis (after text is complete)
+            if payload.include_audio:
+                try:
+                    first_sentence = full_text.split(".")[0].split("?")[0].strip() + "."
+                    audio_data = await voice_engine.synthesize_to_base64(first_sentence[:120])
+                    if audio_data:
+                        yield _sse_event("audio", audio_base64=audio_data)
+                except Exception:
+                    pass
+
+            yield _sse_event("done", path="FAST")
+
+        else:
+            # 2B. Actionable Command Path — stream progress events
+            yield _sse_event("status", "planning task...")
+
+            context_engine = ContextEngine()
+            system_ctx = await context_engine.assemble_context(db, current_user.id, query=payload.message)
+
+            dag_planner = DAGPlanner()
+            dag_plan = dag_planner.plan(classification, initial_inputs={"raw_command": payload.message})
+
+            yield _sse_event("status", f"executing {len(dag_plan.steps)} step(s)...")
+
+            # Create Task in database
+            task = Task(
+                user_id=current_user.id,
+                source="chat",
+                intent={"goal": classification.goal, "raw_message": payload.message, "entities": classification.entities},
+                path=dag_plan.task_path,
+                status="PLANNED",
+                trace_id=trace_id,
+            )
+            db.add(task)
+            await db.flush()
+
+            for step_plan in dag_plan.steps:
+                step_record = TaskStep(
+                    task_id=task.id,
+                    step_key=step_plan.step_key,
+                    kind="tool",
+                    capability=step_plan.capability,
+                    status="PLANNED",
+                    inputs=step_plan.inputs,
+                )
+                db.add(step_record)
+
+            await db.commit()
+
+            # Execute and stream progress
+            for i, step_plan in enumerate(dag_plan.steps, 1):
+                yield _sse_event("progress", f"Step {i}/{len(dag_plan.steps)}: {step_plan.capability}", step=i, total=len(dag_plan.steps))
+
+            job_result = await execute_task_job({"worker_id": "chat-orchestrator"}, str(task.id), session=db)
+            await db.commit()
+
+            # Reload and synthesize report
+            task_res = await db.execute(
+                select(Task).where(Task.id == task.id).options(selectinload(Task.steps))
+            )
+            reloaded_task = task_res.scalar_one()
+
+            steps_data = [
+                {"step_key": s.step_key, "capability": s.capability, "status": s.status, "outputs": s.outputs, "error": s.error}
+                for s in reloaded_task.steps
+            ]
+
+            synthesizer = ResultSynthesizer()
+            report = synthesizer.synthesize(
+                task_goal=classification.goal,
+                task_status=reloaded_task.status,
+                steps_data=steps_data,
+            )
+
+            reloaded_task.result = report.model_dump()
+            await db.commit()
+
+            # Stream the spoken summary token by token
+            words = report.spoken_summary.split(" ")
+            for i, word in enumerate(words):
+                token = word if i == 0 else " " + word
+                yield _sse_event("token", token)
+                await asyncio.sleep(0.015)
+
+            # Stream report data
+            yield _sse_event("report", report=report.model_dump())
+
+            # Audio
+            if payload.include_audio:
+                try:
+                    audio_data = await voice_engine.synthesize_to_base64(report.spoken_summary)
+                    if audio_data:
+                        yield _sse_event("audio", audio_base64=audio_data)
+                except Exception:
+                    pass
+
+            yield _sse_event("done", path=dag_plan.task_path, task_id=str(reloaded_task.id))
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )

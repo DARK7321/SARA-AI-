@@ -4,7 +4,7 @@ Handles dynamic routing across model tiers (FAST / SMART / DEEP) and providers.
 """
 from decimal import Decimal
 import os
-from typing import Any, Dict, Optional, Type
+from typing import Any, AsyncIterator, Dict, Optional, Type
 from uuid import UUID
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,12 +23,8 @@ class ModelRouter:
         self.config_path = config_path
         self.providers: Dict[str, BaseModelProvider] = {}
         self.task_routing: Dict[str, str] = {
-            "FAST": "gemini-3.6-flash",
-            "SMART": "gemini-3.6-flash",
-            "DEEP": "gemini-3.6-flash",
             "FAST": "gemini-3.5-flash-lite",
             "SMART": "gemini-3.5-flash-lite",
-            "DEEP": "gemini-3.5-flash",
             "DEEP": "gemini-3.8-flash",
         }
         self._initialize()
@@ -44,21 +40,30 @@ class ModelRouter:
                 with open(self.config_path, "r", encoding="utf-8") as f:
                     data = yaml.safe_load(f) or {}
                     routing = data.get("task_routing", {})
-                    # Map config values to model IDs
                     for path, target in routing.items():
-                        if "flash" in target:
-                            self.task_routing[path] = "gemini-3.6-flash"
-                            self.task_routing[path] = "gemini-3.5-flash-lite"
-                        elif "pro" in target:
-                            self.task_routing[path] = "gemini-3.6-flash"
-                            self.task_routing[path] = "gemini-3.5-flash"
+                        if "pro" in target or "3.8" in target:
                             self.task_routing[path] = "gemini-3.8-flash"
+                        elif "lite" in target:
+                            self.task_routing[path] = "gemini-3.5-flash-lite"
+                        elif "flash" in target:
+                            self.task_routing[path] = "gemini-3.5-flash-lite"
             except Exception:
                 pass
 
     def get_provider(self, provider_name: str = "gemini") -> BaseModelProvider:
         """Retrieve configured provider by name."""
         return self.providers.get(provider_name, self.providers["gemini"])
+
+    def _resolve_provider(self, provider_name: str = "gemini") -> BaseModelProvider:
+        """Resolve provider with fallback to mock if API key is missing."""
+        provider = self.get_provider(provider_name)
+        gemini_prov = self.providers.get("gemini")
+        if provider_name == "gemini" and gemini_prov and (
+            not getattr(gemini_prov, "api_key", None)
+            or "your-gemini" in getattr(gemini_prov, "api_key", "")
+        ):
+            provider = self.get_provider("mock")
+        return provider
 
     async def complete(
         self,
@@ -72,16 +77,8 @@ class ModelRouter:
         prompt_version: int = 1,
         task_step_id: Optional[UUID] = None,
     ) -> ModelResponse:
-        provider = self.get_provider(provider_name)
-        model_id = self.task_routing.get(path, "gemini-2.0-flash")
-
-        # Check if Gemini key is placeholder or missing
-        gemini_prov = self.providers.get("gemini")
-        if provider_name == "gemini" and gemini_prov and (
-            not getattr(gemini_prov, "api_key", None)
-            or "your-gemini" in getattr(gemini_prov, "api_key", "")
-        ):
-            provider = self.get_provider("mock")
+        provider = self._resolve_provider(provider_name)
+        model_id = self.task_routing.get(path, "gemini-3.5-flash-lite")
 
         try:
             response = await provider.generate(
@@ -117,4 +114,33 @@ class ModelRouter:
             await db_session.flush()
 
         return response
+
+    async def stream(
+        self,
+        prompt: str,
+        path: str = "FAST",
+        system_prompt: Optional[str] = None,
+        provider_name: str = "gemini",
+    ) -> AsyncIterator[str]:
+        """Stream response tokens from the provider for real-time SSE delivery."""
+        provider = self._resolve_provider(provider_name)
+        model_id = self.task_routing.get(path, "gemini-3.5-flash-lite")
+
+        try:
+            async for chunk in provider.generate_stream(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                model_name=model_id,
+            ):
+                yield chunk
+        except Exception:
+            # Fallback to mock non-streaming response
+            mock_provider = self.get_provider("mock")
+            response = await mock_provider.generate(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                model_name=model_id,
+            )
+            yield response.content
+
 

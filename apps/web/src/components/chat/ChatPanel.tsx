@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { Send, Mic, Square, Volume2, Bot, User, CheckCircle, AlertTriangle, Clock, ShieldAlert } from "lucide-react";
-import { sendChatMessage, ChatResponse } from "@/lib/api";
+import { sendChatMessageStream, ChatResponse } from "@/lib/api";
 import { playBase64Audio, stopAudio, subscribeSpeaking } from "@/lib/audio";
 
 interface MessageItem {
@@ -37,6 +37,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [streamStatus, setStreamStatus] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -55,7 +56,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     if (!text || isLoading) return;
 
     const userMessageId = `user_${Date.now()}`;
-    const newMessages: MessageItem[] = [
+    const botMessageId = `friday_${Date.now()}`;
+    
+    // Add user message AND an empty bot message immediately
+    const initialMessages: MessageItem[] = [
       ...messages,
       {
         id: userMessageId,
@@ -63,44 +67,81 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         text,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       },
+      {
+        id: botMessageId,
+        sender: "friday",
+        text: "", // Will be filled via streaming
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      }
     ];
-    setMessages(newMessages);
+    
+    setMessages(initialMessages);
     setInputText("");
     setIsLoading(true);
+    setStreamStatus(null);
 
-    try {
-      const data = await sendChatMessage(text, !isVoiceMuted, selectedVoice);
+    let currentText = "";
+    let finalAudioBase64: string | undefined;
 
-      const fridayMsg: MessageItem = {
-        id: `friday_${Date.now()}`,
-        sender: "friday",
-        text: data.reply,
-        report: data.report,
-        audioBase64: data.audio_base64,
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      };
-      setMessages([...newMessages, fridayMsg]);
-
-      if (data.task_id && onTaskCreated) {
-        onTaskCreated(data.task_id);
-      }
-
-      if (!isVoiceMuted && data.audio_base64) {
-        playBase64Audio(data.audio_base64);
-      }
-    } catch (err: any) {
-      setMessages([
-        ...newMessages,
-        {
-          id: `err_${Date.now()}`,
-          sender: "friday",
-          text: `Error connecting to OmniBrain API: ${err.message}`,
-          timestamp: "Error",
-        },
-      ]);
-    } finally {
-      setIsLoading(false);
-    }
+    await sendChatMessageStream(
+      text,
+      (event) => {
+        if (event.type === "status") {
+          setStreamStatus(event.content!);
+        } else if (event.type === "progress") {
+          setStreamStatus(event.content!);
+        } else if (event.type === "token") {
+          currentText += event.content;
+          setStreamStatus(null);
+          
+          setMessages((prev) => 
+            prev.map((msg) => 
+              msg.id === botMessageId 
+                ? { ...msg, text: currentText } 
+                : msg
+            )
+          );
+        } else if (event.type === "report") {
+          setMessages((prev) => 
+            prev.map((msg) => 
+              msg.id === botMessageId 
+                ? { ...msg, report: event.report } 
+                : msg
+            )
+          );
+        } else if (event.type === "audio") {
+          finalAudioBase64 = event.audio_base64;
+          setMessages((prev) => 
+            prev.map((msg) => 
+              msg.id === botMessageId 
+                ? { ...msg, audioBase64: finalAudioBase64 } 
+                : msg
+            )
+          );
+          if (!isVoiceMuted && finalAudioBase64) {
+            playBase64Audio(finalAudioBase64);
+          }
+        } else if (event.type === "done") {
+          setIsLoading(false);
+          setStreamStatus(null);
+          if (event.task_id && onTaskCreated) {
+            onTaskCreated(event.task_id);
+          }
+        } else if (event.type === "error") {
+          setMessages((prev) => 
+            prev.map((msg) => 
+              msg.id === botMessageId 
+                ? { ...msg, text: msg.text + `\n\nError: ${event.content}` } 
+                : msg
+            )
+          );
+          setIsLoading(false);
+          setStreamStatus(null);
+        }
+      },
+      !isVoiceMuted,
+      selectedVoice
+    );
   };
 
   const toggleMic = () => {
@@ -139,7 +180,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         <div className="flex items-center space-x-3">
           <div
             className={`w-8 h-8 rounded-full bg-cyan-500/10 border border-cyan-400/40 flex items-center justify-center text-cyan-400 transition-all ${
-              isSpeaking ? "speaking-pulse border-cyan-400 text-cyan-300" : ""
+              isSpeaking || isLoading ? "speaking-pulse border-cyan-400 text-cyan-300" : ""
             }`}
           >
             <Bot className="w-4 h-4" />
@@ -151,6 +192,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 <span className="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-full border border-cyan-500/30 flex items-center space-x-1 animate-pulse">
                   <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
                   <span>Speaking...</span>
+                </span>
+              )}
+              {!isSpeaking && streamStatus && (
+                <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30 flex items-center space-x-1 animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  <span>{streamStatus}</span>
                 </span>
               )}
             </div>

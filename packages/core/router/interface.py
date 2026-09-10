@@ -5,7 +5,7 @@ token tracking, latency tracking, structured output validation, and cost logging
 """
 from abc import ABC, abstractmethod
 from decimal import Decimal
-from typing import Any, Dict, Optional, Type
+from typing import Any, AsyncIterator, Dict, Optional, Type
 from pydantic import BaseModel, Field
 
 
@@ -39,4 +39,23 @@ class BaseModelProvider(ABC):
     ) -> ModelResponse:
         """Generate a response, optionally parsed into a Pydantic schema."""
         ...
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        model_name: Optional[str] = None,
+        temperature: float = 0.2,
+        max_tokens: int = 2048,
+    ) -> AsyncIterator[str]:
+        """Stream response tokens. Default: falls back to non-streaming generate()."""
+        response = await self.generate(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            model_name=model_name,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        yield response.content
+
 

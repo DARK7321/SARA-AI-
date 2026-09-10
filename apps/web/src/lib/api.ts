@@ -96,6 +96,93 @@ export async function sendChatMessage(
   return json.data;
 }
 
+export type ChatStreamCallback = (event: {
+  type: "status" | "token" | "progress" | "audio" | "report" | "done" | "error";
+  content?: string;
+  step?: number;
+  total?: number;
+  audio_base64?: string;
+  report?: any;
+  path?: string;
+  task_id?: string;
+}) => void;
+
+export async function sendChatMessageStream(
+  message: string,
+  onEvent: ChatStreamCallback,
+  includeAudio = true,
+  voice = "auto"
+): Promise<void> {
+  const headers = await getAuthHeaders();
+  
+  try {
+    const res = await fetch(`${API_BASE}/v1/chat/stream`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        message,
+        include_audio: includeAudio,
+        voice,
+      }),
+    });
+
+    if (res.status === 401) {
+      await login();
+      return sendChatMessageStream(message, onEvent, includeAudio, voice);
+    }
+
+    if (!res.ok) {
+      throw new Error(`Chat Stream API failed with status ${res.status}`);
+    }
+
+    if (!res.body) {
+      throw new Error("ReadableStream not supported by the browser or response has no body");
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      
+      const lines = buffer.split("\n\n");
+      buffer = lines.pop() || ""; // Keep the incomplete chunk in the buffer
+
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const dataStr = line.slice(6);
+          if (dataStr.trim() === "[DONE]") {
+            // Standard SSE termination (if backend sends it)
+            continue;
+          }
+          try {
+            const parsed = JSON.parse(dataStr);
+            onEvent(parsed);
+          } catch (e) {
+            console.error("Failed to parse SSE line:", dataStr, e);
+          }
+        }
+      }
+    }
+    
+    // Process any remaining buffer if it happens to end exactly at \n\n
+    if (buffer.startsWith("data: ")) {
+      try {
+        const parsed = JSON.parse(buffer.slice(6));
+        onEvent(parsed);
+      } catch (e) {}
+    }
+    
+  } catch (err: any) {
+    console.error("Chat streaming error:", err);
+    onEvent({ type: "error", content: err.message });
+  }
+}
+
 export async function fetchTasks(limit = 10): Promise<any[]> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE}/v1/tasks?limit=${limit}`, { headers });

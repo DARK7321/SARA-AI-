@@ -5,7 +5,7 @@ Supports Gemini 2.0 Flash and Gemini 2.5 Pro via google-generativeai.
 import json
 import time
 from decimal import Decimal
-from typing import Any, Dict, Optional, Type
+from typing import Any, AsyncIterator, Dict, Optional, Type
 from pydantic import BaseModel
 
 import google.generativeai as genai
@@ -39,7 +39,6 @@ class GeminiProvider(BaseModelProvider):
                 "GEMINI_API_KEY is not configured. Please provide an API key in .env"
             )
 
-        model_id = model_name or "gemini-3.6-flash"
         model_id = model_name or "gemini-3.5-flash-lite"
         start_time = time.time()
 
@@ -106,4 +105,35 @@ class GeminiProvider(BaseModelProvider):
             latency_ms=latency_ms,
             provider="gemini",
         )
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        model_name: Optional[str] = None,
+        temperature: float = 0.2,
+        max_tokens: int = 2048,
+    ) -> AsyncIterator[str]:
+        """Stream response tokens from Gemini API in real-time."""
+        if not self.api_key:
+            raise ValueError("GEMINI_API_KEY is not configured.")
+
+        model_id = model_name or "gemini-3.5-flash-lite"
+
+        generation_config = genai.types.GenerationConfig(
+            temperature=temperature,
+            max_output_tokens=max_tokens,
+        )
+
+        model = genai.GenerativeModel(
+            model_name=model_id,
+            system_instruction=system_prompt if system_prompt else None,
+            generation_config=generation_config,
+        )
+
+        response = await model.generate_content_async(prompt, stream=True)
+        async for chunk in response:
+            if chunk.text:
+                yield chunk.text
+
 
