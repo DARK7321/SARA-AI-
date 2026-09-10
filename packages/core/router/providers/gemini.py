@@ -39,7 +39,6 @@ class GeminiProvider(BaseModelProvider):
                 "GEMINI_API_KEY is not configured. Please provide an API key in .env"
             )
 
-        model_id = model_name or "gemini-2.0-flash"
         model_id = model_name or "gemini-3.6-flash"
         start_time = time.time()
 

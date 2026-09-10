@@ -23,9 +23,6 @@ class ModelRouter:
         self.config_path = config_path
         self.providers: Dict[str, BaseModelProvider] = {}
         self.task_routing: Dict[str, str] = {
-            "FAST": "gemini-2.0-flash",
-            "SMART": "gemini-2.0-flash",
-            "DEEP": "gemini-2.5-pro",
             "FAST": "gemini-3.6-flash",
             "SMART": "gemini-3.6-flash",
             "DEEP": "gemini-3.6-flash",
@@ -46,10 +43,8 @@ class ModelRouter:
                     # Map config values to model IDs
                     for path, target in routing.items():
                         if "flash" in target:
-                            self.task_routing[path] = "gemini-2.0-flash"
                             self.task_routing[path] = "gemini-3.6-flash"
                         elif "pro" in target:
-                            self.task_routing[path] = "gemini-2.5-pro"
                             self.task_routing[path] = "gemini-3.6-flash"
             except Exception:
                 pass

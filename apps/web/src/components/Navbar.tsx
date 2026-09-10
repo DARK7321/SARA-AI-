@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Brain, Volume2, VolumeX, Shield, Activity, Radio, Bell, Users } from "lucide-react";
+import { Brain, Volume2, VolumeX, Shield, Activity, Radio, Bell, Users, Mic } from "lucide-react";
 import { fetchHealthCenter, fetchNotifications } from "@/lib/api";
 import NotificationCenter from "./notifications/NotificationCenter";
+import { VoiceCloneStudio } from "./voice/VoiceCloneStudio";
 
 interface NavbarProps {
   activeTab: "chat" | "approvals" | "integrations" | "workflows" | "webhooks" | "settings" | "frameworks";
@@ -28,6 +29,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
   const [unreadNotifsCount, setUnreadNotifsCount] = useState<number>(0);
   const [autonomyLevel, setAutonomyLevel] = useState<number>(2);
+  const [isVoiceStudioOpen, setIsVoiceStudioOpen] = useState<boolean>(false);
 
   useEffect(() => {
     fetchHealthCenter().then((data) => {
@@ -163,10 +165,21 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="bg-transparent text-slate-200 outline-none text-xs cursor-pointer"
           >
             <option value="auto" className="bg-slate-900">Auto (Hindi & English)</option>
+            <option value="custom_clone" className="bg-slate-900">🎙️ My Cloned Voice</option>
             <option value="hi-IN-SwaraNeural" className="bg-slate-900">Swara (Hindi Lady)</option>
             <option value="en-US-JennyNeural" className="bg-slate-900">Jenny (English Lady)</option>
           </select>
         </div>
+
+        {/* Voice Clone Studio Button */}
+        <button
+          onClick={() => setIsVoiceStudioOpen(true)}
+          className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 transition-all cursor-pointer shadow-sm"
+          title="Open Voice Clone Studio"
+        >
+          <Mic className="w-3.5 h-3.5" />
+          <span>Voice Studio</span>
+        </button>
 
         {/* Proactive Notifications Bell */}
         <button
@@ -208,6 +221,13 @@ export const Navbar: React.FC<NavbarProps> = ({
         isOpen={isNotificationsOpen}
         onClose={() => setIsNotificationsOpen(false)}
         onUnreadChange={(count) => setUnreadNotifsCount(count)}
+      />
+
+      {/* Voice Clone Studio Modal */}
+      <VoiceCloneStudio
+        isOpen={isVoiceStudioOpen}
+        onClose={() => setIsVoiceStudioOpen(false)}
+        onVoiceActivated={(voice) => setSelectedVoice(voice)}
       />
     </header>
   );

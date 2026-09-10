@@ -44,8 +44,11 @@ class VoiceEngine:
         pitch: str = "+0Hz",
     ) -> bytes:
         """Synthesize text into MP3 audio bytes."""
+        """Synthesize text into MP3 audio bytes with cloned voice adaptation."""
         spoken_text = clean_text_for_speech(text)
         selected_voice = voice or self.default_voice
+        applied_rate = rate
+        applied_pitch = pitch
 
         # If text contains Devanagari Hindi characters, English voices cannot pronounce them!
         # Automatically route to Swara (Hindi) voice so it speaks fluid Hindi.
@@ -53,11 +56,31 @@ class VoiceEngine:
         if has_devanagari:
             selected_voice = DEFAULT_HINGLISH_VOICE
 
+        # Check if custom cloned voice requested
+        if selected_voice in ("custom_clone", "custom"):
+            try:
+                from packages.core.voice.cloner import voice_cloner
+                profile = voice_cloner.get_current_profile()
+                if profile:
+                    selected_voice = profile.base_hindi_voice if has_devanagari else profile.base_english_voice
+                    applied_pitch = profile.pitch_adjustment
+                    applied_rate = profile.rate_adjustment
+                else:
+                    selected_voice = DEFAULT_HINGLISH_VOICE if has_devanagari else DEFAULT_LADY_VOICE
+            except Exception:
+                selected_voice = DEFAULT_HINGLISH_VOICE if has_devanagari else DEFAULT_LADY_VOICE
+        elif has_devanagari:
+            # If text contains Devanagari Hindi characters, ensure Hindi-capable neural model
+            if not selected_voice.startswith("hi-"):
+                selected_voice = DEFAULT_HINGLISH_VOICE
+
         communicate = edge_tts.Communicate(
             text=spoken_text,
             voice=selected_voice,
             rate=rate,
             pitch=pitch,
+            rate=applied_rate,
+            pitch=applied_pitch,
         )
 
         audio_stream = io.BytesIO()
@@ -71,8 +94,11 @@ class VoiceEngine:
         self,
         text: str,
         voice: Optional[str] = None,
+        rate: str = "+0%",
+        pitch: str = "+0Hz",
     ) -> str:
         """Synthesize text into a base64 MP3 data string ready for browser/client playback."""
         audio_bytes = await self.synthesize_to_bytes(text=text, voice=voice)
+        audio_bytes = await self.synthesize_to_bytes(text=text, voice=voice, rate=rate, pitch=pitch)
         return base64.b64encode(audio_bytes).decode("utf-8")
 

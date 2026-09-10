@@ -530,6 +530,77 @@ export async function fetchFrameworkRun(runId: string): Promise<FrameworkRunResu
   return json.data;
 }
 
+export interface VoiceProfileData {
+  profile_id: string;
+  name: string;
+  duration_sec: number;
+  detected_pitch_hz: number;
+  detected_rate_wpm: number;
+  tonal_profile: string;
+  pitch_adjustment: string;
+  rate_adjustment: string;
+  sample_filename: string;
+  is_active: boolean;
+}
+
+export interface VoiceProfileResponse {
+  has_profile: boolean;
+  profile?: VoiceProfileData;
+  active_voice: string;
+  has_reference_audio: boolean;
+}
+
+export async function fetchVoiceProfile(): Promise<VoiceProfileResponse | null> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/v1/voice/clone/current`, { headers });
+  if (!res.ok) return null;
+  const json = await res.json();
+  return json.data;
+}
+
+export async function uploadVoiceSample(
+  audioBase64: string,
+  filename = "reference.wav"
+): Promise<VoiceProfileData> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/v1/voice/clone/upload`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ audio_base64: audioBase64, filename }),
+  });
+  if (!res.ok) {
+    const json = await res.json();
+    throw new Error(json.detail || "Failed to upload and analyze voice sample");
+  }
+  const json = await res.json();
+  return json.data.profile;
+}
+
+export async function previewClonedVoice(text: string): Promise<string> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/v1/voice/clone/preview`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) {
+    const json = await res.json();
+    throw new Error(json.detail || "Failed to generate voice preview");
+  }
+  const json = await res.json();
+  return json.data.audio_base64;
+}
+
+export async function activateClonedVoice(): Promise<boolean> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/v1/voice/clone/activate`, {
+    method: "POST",
+    headers,
+  });
+  return res.ok;
+}
+
+
 
 
 

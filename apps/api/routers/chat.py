@@ -58,9 +58,13 @@ async def chat_with_brain(
         for kw in ["kaise", "kya", "namaste", "tum", "aap", "mera", "meri", "hai", "karo", "kaho", "batao", "shuru", "theek", "bhai", "bat", "baat"]
     )
     selected_voice = payload.voice
-    if not selected_voice or selected_voice == "auto":
+    user_pref_voice = (current_user.settings or {}).get("active_voice") if current_user else None
+
+    if selected_voice == "custom_clone" or (not selected_voice and user_pref_voice == "custom_clone"):
+        selected_voice = "custom_clone"
+    elif not selected_voice or selected_voice == "auto":
         selected_voice = DEFAULT_HINGLISH_VOICE if has_hindi else DEFAULT_LADY_VOICE
-    elif has_hindi and not selected_voice.startswith("hi-"):
+    elif has_hindi and not selected_voice.startswith("hi-") and selected_voice != "custom_clone":
         selected_voice = DEFAULT_HINGLISH_VOICE
 
     voice_engine = VoiceEngine(default_voice=selected_voice)

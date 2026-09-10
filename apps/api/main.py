@@ -19,6 +19,7 @@ from apps.api.routers import (
     safety,
     aliases,
     frameworks,
+    voice,
 )
 from apps.api.settings import get_settings
 from packages.core.schemas.common import APIResponse
@@ -65,6 +66,7 @@ app.include_router(mobile.router, prefix="/v1", tags=["mobile", "companion"])
 app.include_router(safety.router, prefix="/v1", tags=["safety", "policies"])
 app.include_router(aliases.router, prefix="/v1/aliases", tags=["aliases"])
 app.include_router(frameworks.router, prefix="/v1/frameworks", tags=["frameworks", "agents"])
+app.include_router(voice.router, prefix="/v1/voice", tags=["voice", "cloning"])
 
 
 @app.get("/", response_model=APIResponse)
