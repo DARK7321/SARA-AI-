@@ -71,7 +71,6 @@ class EmbeddingService:
             try:
                 import google.generativeai as genai
                 result = genai.embed_content(
-                    model="models/text-embedding-004",
                     model="models/gemini-embedding-001",
                     content=text,
                     output_dimensionality=EMBEDDING_DIM,
