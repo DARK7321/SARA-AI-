@@ -16,9 +16,11 @@ def clean_text_for_speech(text: str) -> str:
     """Normalize text so TTS pronounces words naturally instead of spelling them out."""
     if not text:
         return ""
-    # Replace F.R.I.D.A.Y. or variations with natural word 'Friday'
-    cleaned = re.sub(r"(?i)f\.r\.i\.d\.a\.y\.?", "Friday", text)
-    cleaned = re.sub(r"\bFRIDAY\b", "Friday", cleaned)
+    # Replace S.A.R.A. or variations with natural word 'Sara'
+    cleaned = re.sub(r"(?i)s\.a\.r\.a\.?", "Sara", text)
+    cleaned = re.sub(r"\bSARA\b", "Sara", cleaned)
+    cleaned = re.sub(r"(?i)f\.r\.i\.d\.a\.y\.?", "Sara", cleaned)
+    cleaned = re.sub(r"\bFRIDAY\b", "Sara", cleaned)
     # Strip markdown bold/italic formatting
     cleaned = re.sub(r"\*\*([^*]+)\*\*", r"\1", cleaned)
     cleaned = re.sub(r"\*([^*]+)\*", r"\1", cleaned)
@@ -43,7 +45,6 @@ class VoiceEngine:
         rate: str = "+0%",
         pitch: str = "+0Hz",
     ) -> bytes:
-        """Synthesize text into MP3 audio bytes."""
         """Synthesize text into MP3 audio bytes with cloned voice adaptation."""
         spoken_text = clean_text_for_speech(text)
         selected_voice = voice or self.default_voice
@@ -77,8 +78,6 @@ class VoiceEngine:
         communicate = edge_tts.Communicate(
             text=spoken_text,
             voice=selected_voice,
-            rate=rate,
-            pitch=pitch,
             rate=applied_rate,
             pitch=applied_pitch,
         )
@@ -98,7 +97,6 @@ class VoiceEngine:
         pitch: str = "+0Hz",
     ) -> str:
         """Synthesize text into a base64 MP3 data string ready for browser/client playback."""
-        audio_bytes = await self.synthesize_to_bytes(text=text, voice=voice)
         audio_bytes = await self.synthesize_to_bytes(text=text, voice=voice, rate=rate, pitch=pitch)
         return base64.b64encode(audio_bytes).decode("utf-8")
 

@@ -29,7 +29,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     {
       id: "welcome",
       sender: "friday",
-      text: "Namaste! I am Friday, your personal AI operating system assistant. All systems, security policies, and workspace tools are online. Aap mujhse Hindi ya English mein baat kar sakte hain!",
+      text: "Namaste! I am Sara, your personal AI operating system assistant. All systems, security policies, and workspace tools are online. Aap mujhse Hindi ya English mein baat kar sakte hain!",
       timestamp: "Just now",
     },
   ]);
@@ -192,7 +192,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             >
               <div className="flex items-center justify-between mb-1 space-x-2 text-[11px]">
                 <span className="font-semibold text-slate-400">
-                  {msg.sender === "user" ? "You" : "Friday"}
+                  {msg.sender === "user" ? "You" : "Sara"}
                 </span>
                 <div className="flex items-center space-x-2">
                   <span className="text-slate-500 text-[10px]">{msg.timestamp}</span>
@@ -287,10 +287,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       {/* Quick Prompt Chips */}
       <div className="px-4 py-2 border-t border-slate-800/80 bg-slate-950/40 flex flex-wrap gap-2">
         <button
-          onClick={() => handleSend("Kaise ho Friday?")}
+          onClick={() => handleSend("Kaise ho Sara?")}
           className="text-xs bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 px-3 py-1 rounded-full transition-all"
         >
-          Kaise ho Friday?
+          Kaise ho Sara?
         </button>
         <button
           onClick={() => handleSend("Tum kaun ho aur kya kar sakti ho?")}
@@ -331,7 +331,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSend()}
-          placeholder="Message or instruction for Friday (Hindi / English)..."
+          placeholder="Message or instruction for Sara (Hindi / English)..."
           className="flex-1 bg-slate-900/90 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none focus:border-cyan-500/50 transition-all"
         />
 

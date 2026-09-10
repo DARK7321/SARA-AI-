@@ -53,7 +53,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex items-center space-x-2">
             <span className="font-bold text-base tracking-wide text-white">OmniBrain</span>
             <span className="text-[10px] font-semibold bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded border border-cyan-500/30 tracking-wider">
-              F.R.I.D.A.Y.
+              S.A.R.A.
             </span>
           </div>
           <p className="text-xs text-slate-400">Personal Autonomous AI Operating System</p>

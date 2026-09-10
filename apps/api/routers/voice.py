@@ -51,8 +51,6 @@ async def get_current_voice_profile(
 @router.post("/clone/upload", response_model=APIResponse)
 async def upload_voice_sample(
     request: Request,
-    file: Optional[UploadFile] = File(None),
-    payload: Optional[VoiceUploadPayload] = None,
     current_user: User = Depends(get_current_user),
 ):
     """Upload an audio sample (file or base64) to analyze and generate a cloned voice profile."""
@@ -60,20 +58,31 @@ async def upload_voice_sample(
     raw_bytes = b""
     filename = "reference.wav"
 
-    if file is not None:
-        raw_bytes = await file.read()
-        filename = file.filename or "reference.wav"
-    elif payload and payload.audio_base64:
-        try:
-            # Handle potential data URL prefixes like data:audio/wav;base64,...
-            b64_str = payload.audio_base64
-            if "," in b64_str:
-                b64_str = b64_str.split(",", 1)[1]
-            raw_bytes = base64.b64decode(b64_str)
-            filename = payload.filename or "reference.wav"
-        except Exception as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid base64 audio: {e}")
+    content_type = request.headers.get("content-type", "")
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        uploaded_file = form.get("file")
+        if uploaded_file and hasattr(uploaded_file, "read"):
+            raw_bytes = await uploaded_file.read()
+            filename = getattr(uploaded_file, "filename", "reference.wav") or "reference.wav"
     else:
+        try:
+            body = await request.json()
+            payload = VoiceUploadPayload(**body) if isinstance(body, dict) else None
+        except Exception:
+            payload = None
+
+        if payload and payload.audio_base64:
+            try:
+                b64_str = payload.audio_base64
+                if "," in b64_str:
+                    b64_str = b64_str.split(",", 1)[1]
+                raw_bytes = base64.b64decode(b64_str)
+                filename = payload.filename or "reference.wav"
+            except Exception as e:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid base64 audio: {e}")
+
+    if not raw_bytes:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No audio file or base64 data provided.")
 
     if len(raw_bytes) < 500:
@@ -155,7 +164,7 @@ async def activate_cloned_voice(
         ok=True,
         data={
             "active_voice": "custom_clone",
-            "message": "Cloned voice activated! Friday will now speak with your custom voice.",
+            "message": "Cloned voice activated! Sara will now speak with your custom voice.",
         },
         trace_id=trace_id,
     )

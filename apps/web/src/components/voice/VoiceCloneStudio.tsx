@@ -424,7 +424,7 @@ export const VoiceCloneStudio: React.FC<VoiceCloneStudioProps> = ({
               }`}
             >
               <CheckCircle2 className="w-4 h-4" />
-              {isActivated ? "Activated as Friday's Voice" : "Set as Active Friday Voice"}
+              {isActivated ? "Activated as Sara's Voice" : "Set as Active Sara Voice"}
             </button>
           )}
         </div>
