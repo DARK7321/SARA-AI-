@@ -27,8 +27,32 @@ from packages.core.router.model_router import ModelRouter
 from packages.core.agents.frameworks import get_framework_adapter
 from apps.api.deps import get_db, get_current_user
 from apps.worker.main import execute_task_job
+from apps.api.shared import (
+    get_model_router, get_context_engine, get_intent_engine,
+    get_dag_planner, get_synthesizer,
+    get_cached_reply, set_cached_reply,
+)
 
 router = APIRouter()
+
+# Enhanced Sara system prompt for accuracy and natural conversation
+SARA_SYSTEM_PROMPT = (
+    "You are Sara (S.A.R.A. — Smart Autonomous Responsive Assistant), "
+    "the user's personal AI operating system.\n\n"
+    "CORE IDENTITY:\n"
+    "- You are professional, intelligent, warm, and efficient.\n"
+    "- You manage the user's emails, calendar, documents, spreadsheets, and workflows.\n"
+    "- You are always honest. If you don't know something, say so clearly.\n\n"
+    "LANGUAGE RULES:\n"
+    "- If user writes in Hindi/Hinglish → reply in natural Hinglish with respectful terms (Aap, Ji).\n"
+    "- If user writes in English → reply in polished, professional English.\n"
+    "- NEVER mix languages unnecessarily.\n\n"
+    "RESPONSE RULES:\n"
+    "- Keep responses to 1-3 crisp, clear sentences.\n"
+    "- Be factually accurate — never make up information.\n"
+    "- When asked about capabilities, list ONLY what you can actually do.\n"
+    "- Give specific, actionable answers — not vague generalities.\n"
+)
 
 
 class ChatRequest(BaseModel):
@@ -208,6 +232,8 @@ async def chat_with_brain(
     # 1. Ultra-Fast Intent Classification (<1ms via fast-path)
     intent_engine = IntentEngine()
     classification = await intent_engine.classify(
+    # 1. Ultra-Fast Intent Classification (<1ms via fast-path, shared singleton)
+    classification = await get_intent_engine().classify(
         user_message=payload.message,
         provider_name="mock" if "test" in str(request.url) else "gemini",
     )
@@ -238,13 +264,22 @@ async def chat_with_brain(
             )
 
         # Dynamic LLM Generation for custom questions
+        # Redis Cache Check — instant response for repeated custom questions
         if not reply_text:
             context_engine = ContextEngine()
+            cached = await get_cached_reply(payload.message)
+            if cached:
+                reply_text = cached
+
+        # Dynamic LLM Generation for novel custom questions
+        if not reply_text:
+            context_engine = get_context_engine()
             # Fast context assembly without remote vector search delay (12ms)
             system_ctx = await context_engine.assemble_context(db, current_user.id, query=None)
             ctx_snippet = system_ctx.to_system_prompt_snippet()
 
             router_engine = ModelRouter()
+            router_engine = get_model_router()
             convo_prompt = (
                 f"{ctx_snippet}\n"
                 f"You are Sara (S.A.R.A.), the user's autonomous, highly capable, and sophisticated personal AI operating system.\n"
@@ -260,9 +295,13 @@ async def chat_with_brain(
             model_res = await router_engine.complete(
                 prompt=convo_prompt,
                 path="FAST",
+                system_prompt=SARA_SYSTEM_PROMPT,
                 provider_name="mock" if "test" in str(request.url) else "gemini",
             )
             reply_text = model_res.content or "Hello! I am ready to assist you with your tasks, emails, calendar, and documents."
+
+            # Cache the LLM response for future instant replies
+            await set_cached_reply(payload.message, reply_text)
 
         # High-Speed Voice Synthesis: synthesize first punchy sentence for instant audio (<300ms)
         audio_data = None
@@ -286,11 +325,15 @@ async def chat_with_brain(
     # 3. Path B: Actionable Command (Accurate SMART / DEEP path)
     context_engine = ContextEngine()
     system_ctx = await context_engine.assemble_context(db, current_user.id, query=payload.message)
+    # 3. Path B: Actionable Command — parallel context assembly
+    system_ctx = await get_context_engine().assemble_context(db, current_user.id, query=payload.message)
     ctx_snippet = system_ctx.to_system_prompt_snippet()
 
     # 4. Path B: Actionable Command (SMART / DEEP path)
     dag_planner = DAGPlanner()
     dag_plan = dag_planner.plan(classification, initial_inputs={"raw_command": payload.message})
+    # 4. Plan and execute DAG
+    dag_plan = get_dag_planner().plan(classification, initial_inputs={"raw_command": payload.message})
 
     # Create Task in database
     task = Task(
@@ -335,6 +378,7 @@ async def chat_with_brain(
 
     synthesizer = ResultSynthesizer()
     report = synthesizer.synthesize(
+    report = get_synthesizer().synthesize(
         task_goal=classification.goal,
         task_status=reloaded_task.status,
         steps_data=steps_data,
@@ -404,9 +448,11 @@ async def chat_stream(
     async def event_generator():
         """Async generator that yields SSE events."""
         # 1. Classify intent (instant via fast-path)
+        # 1. Classify intent (instant via fast-path, shared singleton)
         yield _sse_event("status", "classifying...")
         intent_engine = IntentEngine()
         classification = await intent_engine.classify(
+        classification = await get_intent_engine().classify(
             user_message=payload.message,
             provider_name="gemini",
         )
@@ -449,6 +495,19 @@ async def chat_stream(
                 context_engine = ContextEngine()
                 system_ctx = await context_engine.assemble_context(db, current_user.id, query=None)
                 ctx_snippet = system_ctx.to_system_prompt_snippet()
+                # Redis cache check for repeated custom queries
+                redis_cached = await get_cached_reply(payload.message)
+                if redis_cached:
+                    words = redis_cached.split(" ")
+                    for i, word in enumerate(words):
+                        token = word if i == 0 else " " + word
+                        yield _sse_event("token", token)
+                        await asyncio.sleep(0.02)
+                    full_text = redis_cached
+                else:
+                    # Stream LLM response token-by-token from Gemini
+                    system_ctx = await get_context_engine().assemble_context(db, current_user.id, query=None)
+                    ctx_snippet = system_ctx.to_system_prompt_snippet()
 
                 convo_prompt = (
                     f"{ctx_snippet}\n"
@@ -461,6 +520,11 @@ async def chat_stream(
                     f"User says: \"{payload.message}\"\n\n"
                     f"Your crisp professional response:"
                 )
+                    convo_prompt = (
+                        f"{ctx_snippet}\n"
+                        f"User says: \"{payload.message}\"\n\n"
+                        f"Your crisp professional response:"
+                    )
 
                 router_engine = ModelRouter()
                 full_text = ""
@@ -477,6 +541,23 @@ async def chat_stream(
                     if not full_text:
                         full_text = "Hello! I am Sara, ready to assist you."
                         yield _sse_event("token", full_text)
+                    full_text = ""
+                    try:
+                        async for chunk in get_model_router().stream(
+                            prompt=convo_prompt,
+                            path="FAST",
+                            system_prompt=SARA_SYSTEM_PROMPT,
+                            provider_name="gemini",
+                        ):
+                            full_text += chunk
+                            yield _sse_event("token", chunk)
+                    except Exception:
+                        if not full_text:
+                            full_text = "Hello! I am Sara, ready to assist you."
+                            yield _sse_event("token", full_text)
+
+                    # Cache for future instant replies
+                    await set_cached_reply(payload.message, full_text)
 
             # Audio synthesis (after text is complete)
             if payload.include_audio:
@@ -496,9 +577,11 @@ async def chat_stream(
 
             context_engine = ContextEngine()
             system_ctx = await context_engine.assemble_context(db, current_user.id, query=payload.message)
+            system_ctx = await get_context_engine().assemble_context(db, current_user.id, query=payload.message)
 
             dag_planner = DAGPlanner()
             dag_plan = dag_planner.plan(classification, initial_inputs={"raw_command": payload.message})
+            dag_plan = get_dag_planner().plan(classification, initial_inputs={"raw_command": payload.message})
 
             yield _sse_event("status", f"executing {len(dag_plan.steps)} step(s)...")
 
@@ -546,6 +629,7 @@ async def chat_stream(
             ]
 
             synthesizer = ResultSynthesizer()
+            synthesizer = get_synthesizer()
             report = synthesizer.synthesize(
                 task_goal=classification.goal,
                 task_status=reloaded_task.status,
