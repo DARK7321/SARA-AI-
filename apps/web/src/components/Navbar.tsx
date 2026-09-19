@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { Brain, Volume2, VolumeX, Shield, Activity, Radio, Bell, Users, Mic } from "lucide-react";
-import { fetchHealthCenter, fetchNotifications } from "@/lib/api";
+import { fetchHealthCenter, fetchNotifications, toggleKillSwitch } from "@/lib/api";
 import NotificationCenter from "./notifications/NotificationCenter";
 import { VoiceCloneStudio } from "./voice/VoiceCloneStudio";
 
@@ -186,12 +186,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           onClick={async () => {
             if (confirm("EMERGENCY STOP: Halt all autonomous actions?")) {
               try {
-                const token = localStorage.getItem("omnibrain_token");
-                await fetch("http://localhost:8000/v1/safety/kill-switch", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                  body: JSON.stringify({ active: true, reason: "Manual UI trigger" })
-                });
+                await toggleKillSwitch(true, "Manual UI trigger");
                 alert("System Halted.");
                 window.location.reload();
               } catch (e) {

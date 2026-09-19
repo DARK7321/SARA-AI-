@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { Mail, HardDrive, Calendar, Table, CheckCircle2, XCircle, RefreshCw, Cpu, Database, DollarSign } from "lucide-react";
-import { fetchConnectors, fetchHealthCenter } from "@/lib/api";
+import { fetchConnectors, fetchHealthCenter, API_BASE } from "@/lib/api";
 
 export const IntegrationsHub: React.FC = () => {
   const [connectors, setConnectors] = useState<any[]>([]);
@@ -43,7 +43,7 @@ export const IntegrationsHub: React.FC = () => {
   const handleConnectGoogle = async () => {
     try {
       const token = localStorage.getItem("omnibrain_token");
-      const res = await fetch("http://localhost:8000/v1/connectors/google/auth-url", {
+      const res = await fetch(`${API_BASE}/v1/connectors/google/auth-url`, {
         headers: {
           "Authorization": `Bearer ${token}`
         }

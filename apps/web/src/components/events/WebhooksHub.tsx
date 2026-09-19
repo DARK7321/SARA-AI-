@@ -22,6 +22,7 @@ import {
   fetchWebhooksInfo,
   triggerMobileSimulation,
   WebhookEventItem,
+  API_BASE,
 } from "@/lib/api";
 
 export const WebhooksHub: React.FC = () => {
@@ -77,9 +78,9 @@ export const WebhooksHub: React.FC = () => {
     }
   };
 
-  const mobileWebhookUrl = "http://localhost:8000/v1/mobile/webhook";
-  const githubWebhookUrl = "http://localhost:8000/v1/webhooks/github";
-  const slackWebhookUrl = "http://localhost:8000/v1/webhooks/slack";
+  const mobileWebhookUrl = `${API_BASE}/v1/mobile/webhook`;
+  const githubWebhookUrl = `${API_BASE}/v1/webhooks/github`;
+  const slackWebhookUrl = `${API_BASE}/v1/webhooks/slack`;
 
   return (
     <div className="h-full flex flex-col space-y-4 overflow-y-auto pr-1">

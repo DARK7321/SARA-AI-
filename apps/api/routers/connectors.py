@@ -74,7 +74,12 @@ async def get_google_auth_url(
     current_user: User = Depends(get_current_user),
 ):
     """Generate Google OAuth 2.0 consent screen URL."""
-    auth_mgr = GoogleAuthManager()
+    base_url = str(request.base_url).rstrip("/")
+    if "onrender.com" in base_url and base_url.startswith("http://"):
+        base_url = base_url.replace("http://", "https://", 1)
+    callback_url = f"{base_url}/v1/connectors/google/callback"
+
+    auth_mgr = GoogleAuthManager(redirect_uri=callback_url)
     state = f"user_{current_user.id}_{uuid4().hex[:8]}"
     auth_url = auth_mgr.get_authorization_url(state=state)
 
@@ -105,7 +110,12 @@ async def google_oauth_callback(
     except (IndexError, ValueError):
         raise HTTPException(status_code=400, detail="Invalid state parameter")
 
-    auth_mgr = GoogleAuthManager()
+    base_url = str(request.base_url).rstrip("/")
+    if "onrender.com" in base_url and base_url.startswith("http://"):
+        base_url = base_url.replace("http://", "https://", 1)
+    callback_url = f"{base_url}/v1/connectors/google/callback"
+
+    auth_mgr = GoogleAuthManager(redirect_uri=callback_url)
     tokens = await auth_mgr.exchange_code(code)
 
     now = datetime.now(timezone.utc)
