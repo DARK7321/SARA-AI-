@@ -10,6 +10,7 @@ import time
 router = APIRouter()
 
 
+@router.get("/live", response_model=APIResponse)
 @router.get("/", response_model=APIResponse)
 async def health_check(request: Request):
     """Liveness check — API is up."""
