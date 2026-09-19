@@ -15,8 +15,10 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = 'INFO'
     OWNER_EMAIL: str = 'admin@omnibrain.local'
     OWNER_PASSWORD: str = 'OmniBrain@2026'
+    GOOGLE_CLIENT_ID: str = 'mock-google-client-id'
+    GOOGLE_CLIENT_SECRET: str = 'mock-google-secret'
 
-    model_config = SettingsConfigDict(env_file='.env')
+    model_config = SettingsConfigDict(env_file='.env', extra='allow')
 
 @lru_cache
 def get_settings():

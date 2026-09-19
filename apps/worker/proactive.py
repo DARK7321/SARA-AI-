@@ -23,6 +23,17 @@ from packages.connectors.google_auth import GoogleAuthManager
 logger = logging.getLogger("omnibrain.worker.proactive")
 
 
+def _normalize_results(payload: Any) -> List[Dict[str, Any]]:
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict):
+        for key in ("messages", "items", "events"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return value
+    return []
+
+
 class ProactiveEngine:
     """Coordinates autonomous proactive monitoring and notification generation."""
 
@@ -98,7 +109,7 @@ class ProactiveEngine:
                     inputs={"max_results": 5},
                     access_token=token,
                 )
-                event_items = events if isinstance(events, list) else []
+                event_items = _normalize_results(events)
 
                 # Gather Unread Emails
                 messages = await gmail_actions.execute_action(
@@ -106,7 +117,7 @@ class ProactiveEngine:
                     inputs={"query": "is:unread", "max_results": 5},
                     access_token=token,
                 )
-                unread_items = messages if isinstance(messages, list) else []
+                unread_items = _normalize_results(messages)
 
                 # Format Briefing
                 events_count = len(event_items)
@@ -178,8 +189,9 @@ class ProactiveEngine:
                 inputs={"max_results": 10},
                 access_token=token,
             )
-            if isinstance(events, list):
-                for ev in events:
+            event_items = _normalize_results(events)
+            if event_items:
+                for ev in event_items:
                     ev_id = ev.get("id")
                     ev_title = ev.get("summary", "Upcoming Meeting")
                     start_str = ev.get("start", {}).get("dateTime")
@@ -241,8 +253,9 @@ class ProactiveEngine:
                 inputs={"query": "is:unread", "max_results": 5},
                 access_token=token,
             )
-            if isinstance(unread_msgs, list):
-                for msg in unread_msgs:
+            unread_items = _normalize_results(unread_msgs)
+            if unread_items:
+                for msg in unread_items:
                     msg_id = msg.get("id")
                     subject = msg.get("subject", "")
                     sender = msg.get("from", "Unknown")

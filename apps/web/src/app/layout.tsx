@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "OmniBrain — Command Center",
-  description: "Personal Autonomous AI Operating System with F.R.I.D.A.Y. Voice",
+  title: "Sara — Command Center",
+  description: "Personal Autonomous AI Operating System",
 };
 
 export default function RootLayout({
@@ -19,4 +19,3 @@ export default function RootLayout({
     </html>
   );
 }
-

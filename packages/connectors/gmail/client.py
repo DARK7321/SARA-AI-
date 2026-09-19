@@ -51,6 +51,11 @@ class GmailConnector(BaseConnector):
                 access_token=self.access_token,
             )
 
+            # Apply injection defence for external content
+            from packages.core.security.injection import wrap_dict
+            if request.action in ["gmail.read", "gmail.search"]:
+                result_data = wrap_dict("gmail", result_data)
+
             # Build verification hints based on action
             verification_hints = {}
             if request.action == "gmail.draft":

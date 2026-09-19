@@ -181,6 +181,31 @@ export const Navbar: React.FC<NavbarProps> = ({
           <span>Voice Studio</span>
         </button>
 
+        {/* Emergency STOP Button */}
+        <button
+          onClick={async () => {
+            if (confirm("EMERGENCY STOP: Halt all autonomous actions?")) {
+              try {
+                const token = localStorage.getItem("omnibrain_token");
+                await fetch("http://localhost:8000/v1/safety/kill-switch", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                  body: JSON.stringify({ active: true, reason: "Manual UI trigger" })
+                });
+                alert("System Halted.");
+                window.location.reload();
+              } catch (e) {
+                console.error(e);
+              }
+            }
+          }}
+          className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border border-red-500/50 bg-red-500/20 text-red-100 hover:bg-red-500/40 transition-all shadow-md animate-pulse cursor-pointer"
+          title="EMERGENCY STOP (Halt all tasks)"
+        >
+          <div className="w-2 h-2 rounded-full bg-red-400 mr-1 shadow-[0_0_8px_rgba(248,113,113,0.8)]"></div>
+          <span>STOP</span>
+        </button>
+
         {/* Proactive Notifications Bell */}
         <button
           onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}

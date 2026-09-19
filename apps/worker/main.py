@@ -28,6 +28,8 @@ from packages.connectors.github.client import GitHubConnector
 from packages.connectors.slack.client import SlackConnector
 from packages.connectors.browser.client import BrowserConnector
 from packages.connectors.mcp.client import MCPConnector
+from packages.connectors.websearch.client import WebSearchConnector
+from packages.connectors.host_agent.client import HostAgentConnector
 
 
 @asynccontextmanager
@@ -91,6 +93,8 @@ async def execute_task_job(
         slack_connector = SlackConnector()
         browser_connector = BrowserConnector()
         mcp_connector = MCPConnector()
+        websearch_connector = WebSearchConnector()
+        host_agent_connector = HostAgentConnector()
 
         task_failed = False
         waiting_approval = False
@@ -122,8 +126,12 @@ async def execute_task_job(
                 connector = slack_connector
             elif cap.startswith("browser."):
                 connector = browser_connector
+            elif cap.startswith("host."):
+                connector = host_agent_connector
             elif cap.startswith("mcp."):
                 connector = mcp_connector
+            elif cap.startswith("web."):
+                connector = websearch_connector
 
             # Execute step
             side_effect = SideEffectType.WRITE

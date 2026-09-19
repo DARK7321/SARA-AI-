@@ -24,6 +24,13 @@ export const IntegrationsHub: React.FC = () => {
 
   useEffect(() => {
     loadData();
+    const handleFocus = () => loadData();
+    window.addEventListener("focus", handleFocus);
+    const interval = setInterval(loadData, 4000);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      clearInterval(interval);
+    };
   }, []);
 
   const getConnectorIcon = (id: string) => {
@@ -31,6 +38,32 @@ export const IntegrationsHub: React.FC = () => {
     if (id.includes("drive")) return <HardDrive className="w-5 h-5 text-amber-400" />;
     if (id.includes("cal")) return <Calendar className="w-5 h-5 text-emerald-400" />;
     return <Table className="w-5 h-5 text-cyan-400" />;
+  };
+
+  const handleConnectGoogle = async () => {
+    try {
+      const token = localStorage.getItem("omnibrain_token");
+      const res = await fetch("http://localhost:8000/v1/connectors/google/auth-url", {
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+      if (res.status === 401) {
+        // Token expired! Clear it and automatically login again.
+        localStorage.removeItem("omnibrain_token");
+        alert("Session expired. We are logging you in again. Please click the button one more time after this alert.");
+        return window.location.reload();
+      }
+      const json = await res.json();
+      if (json.ok && json.data?.auth_url) {
+        window.open(json.data.auth_url, "_blank");
+      } else {
+        alert("Error fetching Auth URL: " + JSON.stringify(json));
+      }
+    } catch (e) {
+      console.error("Failed to fetch auth url", e);
+      alert("Failed to reach the server. Make sure the backend is running!");
+    }
   };
 
   return (
@@ -41,13 +74,21 @@ export const IntegrationsHub: React.FC = () => {
           <h3 className="font-semibold text-sm text-slate-100">Integrations & Health Center</h3>
           <p className="text-xs text-slate-400">Google Workspace connections, policy guards, and telemetry</p>
         </div>
-        <button
-          onClick={loadData}
-          disabled={loading}
-          className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-        </button>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={handleConnectGoogle}
+            className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow transition-colors"
+          >
+            Connect Google
+          </button>
+          <button
+            onClick={loadData}
+            disabled={loading}
+            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+          </button>
+        </div>
       </div>
 
       {/* Main Content */}
@@ -109,7 +150,7 @@ export const IntegrationsHub: React.FC = () => {
                     </div>
                     <div>
                       <h5 className="font-semibold text-sm text-slate-100">{c.name}</h5>
-                      <span className="text-[11px] text-slate-500">{c.account_email || "admin@omnibrain.local"}</span>
+                      <span className="text-[11px] text-slate-500">{c.account_email || "Not Connected"}</span>
                     </div>
                   </div>
 

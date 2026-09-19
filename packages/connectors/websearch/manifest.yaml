@@ -1,0 +1,9 @@
+name: connector-websearch
+version: "1.0"
+category: research
+capabilities:
+  - name: web.search
+    side_effect: READ
+    risk: LOW
+    idempotent: true
+

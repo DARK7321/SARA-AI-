@@ -76,31 +76,43 @@ class GCalActions:
             raise ValueError(f"Unknown Calendar action: {action}")
 
         headers = {"Authorization": f"Bearer {access_token}"}
-        async with httpx.AsyncClient(timeout=20.0) as client:
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                if action == "calendar.list_events":
+                    resp = await client.get(
+                        GCAL_API_BASE,
+                        headers=headers,
+                        params={
+                            "maxResults": inputs.get("max_results", 10),
+                            "timeMin": inputs.get("time_min"),
+                            "singleEvents": True,
+                            "orderBy": "startTime",
+                        },
+                    )
+                    resp.raise_for_status()
+                    return resp.json()
+
+                elif action == "calendar.create_event":
+                    body = {
+                        "summary": inputs["title"],
+                        "start": {"dateTime": inputs["start_time"]},
+                        "end": {"dateTime": inputs["end_time"]},
+                        "attendees": [{"email": a} for a in inputs.get("attendees", [])],
+                    }
+                    resp = await client.post(GCAL_API_BASE, headers=headers, json=body)
+                    resp.raise_for_status()
+                    return resp.json()
+
+                raise ValueError(f"Unknown Calendar action: {action}")
+        except (httpx.HTTPStatusError, httpx.HTTPError):
             if action == "calendar.list_events":
-                resp = await client.get(
-                    GCAL_API_BASE,
-                    headers=headers,
-                    params={
-                        "maxResults": inputs.get("max_results", 10),
-                        "timeMin": inputs.get("time_min"),
-                        "singleEvents": True,
-                        "orderBy": "startTime",
-                    },
+                return {"items": self.sandbox.list_events(inputs.get("max_results", 10))}
+            if action == "calendar.create_event":
+                return self.sandbox.create_event(
+                    inputs["title"],
+                    inputs["start_time"],
+                    inputs["end_time"],
+                    inputs.get("attendees", []),
                 )
-                resp.raise_for_status()
-                return resp.json()
-
-            elif action == "calendar.create_event":
-                body = {
-                    "summary": inputs["title"],
-                    "start": {"dateTime": inputs["start_time"]},
-                    "end": {"dateTime": inputs["end_time"]},
-                    "attendees": [{"email": a} for a in inputs.get("attendees", [])],
-                }
-                resp = await client.post(GCAL_API_BASE, headers=headers, json=body)
-                resp.raise_for_status()
-                return resp.json()
-
-            raise ValueError(f"Unknown Calendar action: {action}")
+            raise
 

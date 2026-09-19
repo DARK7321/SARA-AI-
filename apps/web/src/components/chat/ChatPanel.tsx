@@ -83,65 +83,78 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     let currentText = "";
     let finalAudioBase64: string | undefined;
 
-    await sendChatMessageStream(
-      text,
-      (event) => {
-        if (event.type === "status") {
-          setStreamStatus(event.content!);
-        } else if (event.type === "progress") {
-          setStreamStatus(event.content!);
-        } else if (event.type === "token") {
-          currentText += event.content;
-          setStreamStatus(null);
-          
-          setMessages((prev) => 
-            prev.map((msg) => 
-              msg.id === botMessageId 
-                ? { ...msg, text: currentText } 
-                : msg
-            )
-          );
-        } else if (event.type === "report") {
-          setMessages((prev) => 
-            prev.map((msg) => 
-              msg.id === botMessageId 
-                ? { ...msg, report: event.report } 
-                : msg
-            )
-          );
-        } else if (event.type === "audio") {
-          finalAudioBase64 = event.audio_base64;
-          setMessages((prev) => 
-            prev.map((msg) => 
-              msg.id === botMessageId 
-                ? { ...msg, audioBase64: finalAudioBase64 } 
-                : msg
-            )
-          );
-          if (!isVoiceMuted && finalAudioBase64) {
-            playBase64Audio(finalAudioBase64);
+    try {
+      await sendChatMessageStream(
+        text,
+        (event) => {
+          if (event.type === "status") {
+            setStreamStatus(event.content!);
+          } else if (event.type === "progress") {
+            setStreamStatus(event.content!);
+          } else if (event.type === "token") {
+            currentText += event.content;
+            setStreamStatus(null);
+            
+            setMessages((prev) => 
+              prev.map((msg) => 
+                msg.id === botMessageId 
+                  ? { ...msg, text: currentText } 
+                  : msg
+              )
+            );
+          } else if (event.type === "report") {
+            setMessages((prev) => 
+              prev.map((msg) => 
+                msg.id === botMessageId 
+                  ? { ...msg, report: event.report } 
+                  : msg
+              )
+            );
+          } else if (event.type === "audio") {
+            finalAudioBase64 = event.audio_base64;
+            setMessages((prev) => 
+              prev.map((msg) => 
+                msg.id === botMessageId 
+                  ? { ...msg, audioBase64: finalAudioBase64 } 
+                  : msg
+              )
+            );
+            if (!isVoiceMuted && finalAudioBase64) {
+              playBase64Audio(finalAudioBase64);
+            }
+          } else if (event.type === "done") {
+            setIsLoading(false);
+            setStreamStatus(null);
+            if (event.task_id && onTaskCreated) {
+              onTaskCreated(event.task_id);
+            }
+          } else if (event.type === "error") {
+            setMessages((prev) => 
+              prev.map((msg) => 
+                msg.id === botMessageId 
+                  ? { ...msg, text: currentText + "\n\n**Error:** " + ((event as any).error || event.content) } 
+                  : msg
+              )
+            );
+            setIsLoading(false);
+            setStreamStatus(null);
           }
-        } else if (event.type === "done") {
-          setIsLoading(false);
-          setStreamStatus(null);
-          if (event.task_id && onTaskCreated) {
-            onTaskCreated(event.task_id);
-          }
-        } else if (event.type === "error") {
-          setMessages((prev) => 
-            prev.map((msg) => 
-              msg.id === botMessageId 
-                ? { ...msg, text: msg.text + `\n\nError: ${event.content}` } 
-                : msg
-            )
-          );
-          setIsLoading(false);
-          setStreamStatus(null);
-        }
-      },
-      !isVoiceMuted,
-      selectedVoice
-    );
+        },
+        !isVoiceMuted,
+        selectedVoice
+      );
+    } catch (err) {
+      console.error("Failed to send message:", err);
+      setMessages((prev) => 
+        prev.map((msg) => 
+          msg.id === botMessageId 
+            ? { ...msg, text: "**Error:** " + (err instanceof Error ? err.message : String(err)) } 
+            : msg
+        )
+      );
+      setIsLoading(false);
+      setStreamStatus(null);
+    }
   };
 
   const toggleMic = () => {
@@ -174,7 +187,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-900/40 rounded-2xl border border-slate-800/80 overflow-hidden shadow-2xl backdrop-blur-sm">
+    <div className="flex flex-col h-full min-h-0 bg-slate-900/40 rounded-2xl border border-slate-800/80 overflow-hidden shadow-2xl backdrop-blur-sm">
       {/* Header Bar */}
       <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-950/40">
         <div className="flex items-center space-x-3">
@@ -216,7 +229,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       </div>
 
       {/* Message Feed */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
         {messages.map((msg) => (
           <div
             key={msg.id}

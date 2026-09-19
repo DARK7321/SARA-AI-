@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from sqlalchemy.pool import NullPool, AsyncAdaptedQueuePool
 
 DATABASE_URL = os.getenv(
-    "DATABASE_URL", 
-    "postgresql+asyncpg://omnibrain:omnibrain_dev@postgres:5432/omnibrain"
+    "DATABASE_URL",
+    "postgresql+asyncpg://omnibrain:omnibrain_dev@localhost:5432/omnibrain",
 )
 
 # Use NullPool during pytest runs to avoid loop conflicts across test async functions

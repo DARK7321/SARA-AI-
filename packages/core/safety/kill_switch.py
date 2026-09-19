@@ -31,17 +31,24 @@ class EmergencyKillSwitch:
         }
 
     async def _get_client(self) -> Optional[aioredis.Redis]:
-        if self._redis is None:
+        if self._redis is not None:
             try:
-                self._redis = aioredis.from_url(
-                    self.redis_url,
-                    decode_responses=True,
-                    socket_connect_timeout=2.0,
-                )
                 await self._redis.ping()
+                return self._redis
             except Exception as e:
-                logger.debug(f"Redis connection unavailable for kill-switch ({e}), falling back to memory.")
+                logger.debug(f"Redis client stale for kill-switch ({e}), recreating connection.")
                 self._redis = None
+
+        try:
+            self._redis = aioredis.from_url(
+                self.redis_url,
+                decode_responses=True,
+                socket_connect_timeout=2.0,
+            )
+            await self._redis.ping()
+        except Exception as e:
+            logger.debug(f"Redis connection unavailable for kill-switch ({e}), falling back to memory.")
+            self._redis = None
         return self._redis
 
     async def is_active(self) -> bool:

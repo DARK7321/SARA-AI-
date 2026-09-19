@@ -55,17 +55,24 @@ class AnomalyDetector:
         self._in_memory_breakers: Dict[str, Dict[str, Any]] = {}
 
     async def _get_client(self) -> Optional[aioredis.Redis]:
-        if self._redis is None:
+        if self._redis is not None:
             try:
-                self._redis = aioredis.from_url(
-                    self.redis_url,
-                    decode_responses=True,
-                    socket_connect_timeout=2.0,
-                )
                 await self._redis.ping()
+                return self._redis
             except Exception as e:
-                logger.debug(f"Redis unavailable for circuit breaker ({e}), using memory fallback.")
+                logger.debug(f"Redis client stale for circuit breaker ({e}), recreating connection.")
                 self._redis = None
+
+        try:
+            self._redis = aioredis.from_url(
+                self.redis_url,
+                decode_responses=True,
+                socket_connect_timeout=2.0,
+            )
+            await self._redis.ping()
+        except Exception as e:
+            logger.debug(f"Redis unavailable for circuit breaker ({e}), using memory fallback.")
+            self._redis = None
         return self._redis
 
     def _default_breaker_data(self, name: str) -> Dict[str, Any]:

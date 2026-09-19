@@ -1,6 +1,6 @@
 """Task management API router — submit goals, inspect DAG execution progress."""
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -12,6 +12,38 @@ from apps.api.deps import get_db, get_current_user
 from apps.worker.main import execute_task_job
 
 router = APIRouter()
+
+
+@router.get("", response_model=APIResponse)
+async def list_tasks(
+    request: Request,
+    limit: int = Query(default=10, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List the current user's recent tasks for the DAG visualizer."""
+    result = await db.execute(
+        select(Task)
+        .where(Task.user_id == current_user.id)
+        .order_by(Task.created_at.desc())
+        .limit(limit)
+    )
+    tasks = [
+        {
+            "id": str(task.id),
+            "path": task.path,
+            "status": task.status,
+            "intent": task.intent,
+            "result": task.result,
+            "created_at": task.created_at.isoformat() if task.created_at else None,
+        }
+        for task in result.scalars().all()
+    ]
+    return APIResponse(
+        ok=True,
+        data={"tasks": tasks},
+        trace_id=getattr(request.state, "trace_id", None),
+    )
 
 
 @router.post("", response_model=APIResponse)

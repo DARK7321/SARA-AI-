@@ -39,8 +39,8 @@ Analyze user messages and classify them into:
    - FAST: simple information lookup or 1 read tool (latency <1s).
    - SMART: 2-4 coordinated tool steps (e.g. read email, summarize, save to drive or sheet).
    - DEEP: complex multi-stage tasks requiring subagents and extensive reasoning.
-3. required_capabilities: choose from [gmail.read, gmail.search, gmail.draft, gmail.send, drive.list, drive.read, drive.create, drive.share, calendar.list_events, calendar.create_event, sheets.read_rows, sheets.append_rows, sheets.update_cell].
-4. estimated_risk: LOW for reading, MEDIUM for creating drafts, HIGH for sending emails or deleting items.
+3. required_capabilities: choose from [gmail.read, gmail.search, gmail.draft, gmail.send, drive.list, drive.read, drive.create, drive.share, calendar.list_events, calendar.create_event, sheets.read_rows, sheets.append_rows, sheets.update_cell, web.search, host.open_app, host.type_text, host.file_op, host.run_script, host.read_screen].
+4. estimated_risk: LOW for reading, MEDIUM for creating drafts/typing, HIGH for sending emails, running scripts, or deleting items.
 """
 
 
@@ -75,21 +75,23 @@ class IntentEngine:
             req_caps.append("calendar.list_events")
         if any(w in lower_msg for w in ["sheet", "spreadsheet", "शीट"]):
             req_caps.append("sheets.read_rows")
-        if any(w in lower_msg for w in ["drive", "file", "doc", "ड्राइव", "फाइल"]):
+        if any(w in lower_msg for w in ["drive", "file", "doc", "ड्राइव", "फाइल", "folder"]):
             req_caps.append("drive.list")
+        if any(w in lower_msg for w in ["notepad", "excel", "word", "chrome", "app", "script", "window"]):
+            req_caps.append("host.open_app")
 
         # Action verbs indicating tool execution intent
         action_intent_words = [
             "send", "draft", "create", "delete", "remove", "schedule", "update", "append",
             "search inbox", "check mail", "read mail", "check calendar", "bhejo", "banao",
-            "likho", "karo", "hatao", "dhundo"
+            "likho", "karo", "hatao", "dhundo", "open", "type", "run", "kholo", "chalao", "start"
         ]
         has_action_intent = bool(req_caps) or any(w in lower_msg for w in action_intent_words)
 
         # Zero-latency Conversational & Tool Action Bypass:
         # Greetings, general queries, and direct tool commands are classified instantly (<1ms) with 100% precision.
         if provider_name != "mock":
-            if is_chat and not any(w in lower_msg for w in ["send", "delete", "remove", "schedule", "draft", "bhejo", "hatao"]):
+            if is_chat and not has_action_intent:
                 return TaskClassification(
                     is_conversational=True,
                     path="FAST",

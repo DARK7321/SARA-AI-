@@ -3,7 +3,9 @@
  * Interacts with backend FastAPI services on http://localhost:8000.
  */
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+const configuredApiBase = process.env.NEXT_PUBLIC_API_BASE;
+
+export const API_BASE = configuredApiBase || "http://localhost:8000";
 
 let cachedToken: string | null = null;
 
@@ -26,19 +28,33 @@ export async function login(
   }
 
   const json = await res.json();
-  cachedToken = json.data.access_token;
-  if (typeof window !== "undefined") {
-    localStorage.setItem("omnibrain_token", cachedToken!);
+  cachedToken = json.data?.access_token || json.access_token;
+  if (!cachedToken) {
+    throw new Error("No access_token found in login response");
   }
-  return cachedToken!;
+  if (typeof window !== "undefined") {
+    localStorage.setItem("omnibrain_token", cachedToken);
+  }
+  return cachedToken;
+}
+
+export function logout() {
+  cachedToken = null;
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("omnibrain_token");
+  }
 }
 
 export function getAuthToken(): string | null {
-  if (cachedToken) return cachedToken;
+  if (cachedToken && cachedToken !== "undefined") return cachedToken;
   if (typeof window !== "undefined") {
-    cachedToken = localStorage.getItem("omnibrain_token");
+    const t = localStorage.getItem("omnibrain_token");
+    if (t && t !== "undefined") {
+      cachedToken = t;
+      return t;
+    }
   }
-  return cachedToken;
+  return null;
 }
 
 export async function getAuthHeaders(): Promise<Record<string, string>> {
@@ -127,6 +143,7 @@ export async function sendChatMessageStream(
     });
 
     if (res.status === 401) {
+      logout();
       await login();
       return sendChatMessageStream(message, onEvent, includeAudio, voice);
     }

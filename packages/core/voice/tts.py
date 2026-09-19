@@ -103,9 +103,14 @@ class VoiceEngine:
         pitch: str = "+0Hz",
     ) -> str:
         """Synthesize text into a base64 MP3 data string ready for browser/client playback."""
-        audio_bytes = await self.synthesize_to_bytes(text=text, voice=voice, rate=rate, pitch=pitch)
-        return base64.b64encode(audio_bytes).decode("utf-8")
         try:
+            # Subtle tuning to make Swara sound more relaxed and human
+            if not voice or voice == DEFAULT_HINGLISH_VOICE:
+                if pitch == "+0Hz":
+                    pitch = "-2Hz"
+                if rate == "+0%":
+                    rate = "+5%"
+                    
             audio_bytes = await self.synthesize_to_bytes(text=text, voice=voice, rate=rate, pitch=pitch)
             return base64.b64encode(audio_bytes).decode("utf-8") if audio_bytes else ""
         except Exception:

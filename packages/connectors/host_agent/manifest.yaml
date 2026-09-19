@@ -1,0 +1,17 @@
+name: host-agent
+version: "1.0"
+category: desktop
+base_url_env: HOST_AGENT_URL # http://host.docker.internal:7788
+auth: service_jwt # API mints a short-lived token with aud=host-agent
+capabilities:
+  - {name: host.open_app,      side_effect: WRITE,       risk: MEDIUM, idempotent: true}
+  - {name: host.type_text,     side_effect: WRITE,       risk: MEDIUM, idempotent: false}
+  - {name: host.file_op,       side_effect: DESTRUCTIVE, risk: HIGH,   idempotent: true,
+     read_only_actions: [list, read]}
+  - {name: host.run_script,    side_effect: EXTERNAL,    risk: HIGH,   idempotent: false}
+  - {name: host.read_screen,   side_effect: READ,        risk: LOW,    idempotent: true}
+verify:
+  host.open_app:    {check: host.read_screen, expect: "window_title != null"}
+  host.type_text:   {check: host.read_screen, expect: "typed text substring in visible_texts"}
+  host.file_op:     {check: host.file_op:list, expect: "target present/absent as intended"}
+

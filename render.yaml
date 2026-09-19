@@ -1,0 +1,49 @@
+services:
+  - type: web
+    name: sara-api
+    runtime: docker
+    dockerfilePath: Dockerfile.prod
+    plan: free
+    healthCheckPath: /v1/health/live
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: sara-redis
+          property: connectionString
+
+  - type: redis
+    name: sara-redis
+    plan: free
+    ipAllowList: []
+
+  - type: worker
+    name: sara-worker
+    runtime: docker
+    dockerfilePath: Dockerfile.prod
+    dockerCommand: arq apps.worker.main.WorkerSettings
+    plan: free
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: sara-redis
+          property: connectionString

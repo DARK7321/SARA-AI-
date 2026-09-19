@@ -34,15 +34,15 @@ export default function Home() {
 
       <main className="flex-1 p-5 overflow-hidden">
         {activeTab === "chat" && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 h-full">
-            <div className="lg:col-span-7 h-full">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 h-full min-h-0">
+            <div className="lg:col-span-7 h-full min-h-0">
               <ChatPanel
                 isVoiceMuted={isVoiceMuted}
                 selectedVoice={selectedVoice}
                 onTaskCreated={(id) => setSelectedTaskId(id)}
               />
             </div>
-            <div className="lg:col-span-5 h-full">
+            <div className="lg:col-span-5 h-full min-h-0">
               <DAGVisualizer selectedTaskId={selectedTaskId} />
             </div>
           </div>

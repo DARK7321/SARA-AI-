@@ -17,8 +17,19 @@ if (-not $dockerVersion) {
 }
 Write-Host "  -> Docker is active ($dockerVersion)" -ForegroundColor Green
 
-# 2. Start PostgreSQL, Redis & API containers
-Write-Host "[2/5] Starting Backend Containers (PostgreSQL pgvector, Redis 7, FastAPI)..." -ForegroundColor White
+# 2. Start the local desktop-control service
+Write-Host "[2/6] Starting Windows Host Agent (mouse, keyboard, screenshots)..." -ForegroundColor White
+$hostAgent = Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File `"$PSScriptRoot\run_host_agent.ps1`"" -PassThru -WindowStyle Minimized
+Start-Sleep -Seconds 2
+try {
+    $hostHealth = Invoke-RestMethod -Uri "http://localhost:7788/health" -Method Get -TimeoutSec 3 -ErrorAction Stop
+    Write-Host "  -> Host Agent is HEALTHY at http://localhost:7788" -ForegroundColor Green
+} catch {
+    Write-Host "  -> Warning: Host Agent did not become healthy; desktop actions will be unavailable." -ForegroundColor Yellow
+}
+
+# 3. Start PostgreSQL, Redis & API containers
+Write-Host "[3/6] Starting Backend Containers (PostgreSQL pgvector, Redis 7, FastAPI)..." -ForegroundColor White
 docker compose up -d
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Failed to start docker compose containers." -ForegroundColor Red
@@ -26,13 +37,13 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "  -> Backend containers online." -ForegroundColor Green
 
-# 3. Apply Alembic Migrations
-Write-Host "[3/5] Applying Database Migrations..." -ForegroundColor White
+# 4. Apply Alembic Migrations
+Write-Host "[4/6] Applying Database Migrations..." -ForegroundColor White
 docker compose exec -T api alembic upgrade head
 Write-Host "  -> Database schema up to date (Alembic Head)." -ForegroundColor Green
 
-# 4. Check Health Endpoint
-Write-Host "[4/5] Verifying API Gateway Health..." -ForegroundColor White
+# 5. Check Health Endpoint
+Write-Host "[5/6] Verifying API Gateway Health..." -ForegroundColor White
 Start-Sleep -Seconds 2
 $healthOk = $false
 for ($i = 0; $i -lt 15; $i++) {
@@ -53,8 +64,8 @@ if ($healthOk) {
     Write-Host "  -> Warning: API Gateway is still initializing..." -ForegroundColor Yellow
 }
 
-# 5. Launch Command Center UI
-Write-Host "[5/5] Launching Command Center UI on http://localhost:3000..." -ForegroundColor White
+# 6. Launch Command Center UI
+Write-Host "[6/6] Launching Command Center UI on http://localhost:3000..." -ForegroundColor White
 Start-Process "http://localhost:3000"
 
 Write-Host ""

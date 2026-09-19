@@ -85,25 +85,36 @@ async def get_google_auth_url(
     )
 
 
-@router.post("/google/callback", response_model=APIResponse)
+@router.api_route("/google/callback", methods=["GET", "POST"], response_model=APIResponse)
 async def google_oauth_callback(
-    payload: CallbackPayload,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    payload: Optional[CallbackPayload] = None,
 ):
-    """Handle OAuth callback, exchange authorization code, and store encrypted tokens."""
+    """Handle Google OAuth callback requests from either the browser or the API client."""
+    query_params = dict(request.query_params)
+    code = query_params.get("code") or (payload.code if payload else None)
+    state = query_params.get("state") or (payload.state if payload else None)
+
+    if not code or not state:
+        raise HTTPException(status_code=400, detail="Missing OAuth code or state")
+
+    try:
+        user_id_str = state.split("_")[1]
+        user_id = UUID(user_id_str)
+    except (IndexError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid state parameter")
+
     auth_mgr = GoogleAuthManager()
-    tokens = await auth_mgr.exchange_code(payload.code)
+    tokens = await auth_mgr.exchange_code(code)
 
     now = datetime.now(timezone.utc)
     expires_in = tokens.get("expires_in", 3600)
     expires_at = now + timedelta(seconds=expires_in)
 
-    # Check existing connection
     result = await db.execute(
         select(Connection).where(
-            Connection.user_id == current_user.id,
+            Connection.user_id == user_id,
             Connection.provider == "google",
         )
     )
@@ -111,7 +122,7 @@ async def google_oauth_callback(
 
     if not conn:
         conn = Connection(
-            user_id=current_user.id,
+            user_id=user_id,
             provider="google",
             account_email=tokens.get("account_email", "unknown@gmail.com"),
             scopes=DEFAULT_GOOGLE_SCOPES,
@@ -132,11 +143,69 @@ async def google_oauth_callback(
 
     await db.commit()
 
+    if request.method == "GET":
+        from fastapi.responses import HTMLResponse
+        html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>Sara - Google Connected</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #030712;
+            color: #f8fafc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }}
+        .card {{
+            background: #0f172a;
+            border: 1px solid #1e293b;
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            max-width: 440px;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7);
+        }}
+        .icon {{ font-size: 52px; margin-bottom: 12px; }}
+        h1 {{ font-size: 22px; margin: 0 0 10px; color: #38bdf8; }}
+        p {{ color: #94a3b8; font-size: 14px; line-height: 1.6; margin: 8px 0; }}
+        .badge {{
+            display: inline-block;
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-radius: 9999px;
+            padding: 6px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            margin: 16px 0;
+        }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">✨</div>
+        <h1>Google Workspace Connected!</h1>
+        <p>Aapka Gmail account Sara AI assistant ke sath successfully connect ho gaya hai.</p>
+        <div class="badge">✅ {conn.account_email}</div>
+        <p style="font-size: 12px; color: #64748b; margin-top: 20px;">
+            Aap is browser tab ko band kar sakte hain aur <b>Sara Desktop App</b> par wapas ja sakte hain.
+        </p>
+    </div>
+</body>
+</html>"""
+        return HTMLResponse(content=html_content)
+
     return APIResponse(
         ok=True,
         data={
             "status": "connected",
             "provider": "google",
+            "user_id": str(user_id),
             "account_email": conn.account_email,
         },
         trace_id=getattr(request.state, "trace_id", None),

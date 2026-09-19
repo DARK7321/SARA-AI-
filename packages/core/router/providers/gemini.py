@@ -31,7 +31,7 @@ class GeminiProvider(BaseModelProvider):
         schema: Optional[Type[BaseModel]] = None,
         model_name: Optional[str] = None,
         temperature: float = 0.2,
-        max_tokens: int = 2048,
+        max_tokens: int = 512,
     ) -> ModelResponse:
         """Call Gemini API and return standardized ModelResponse."""
         if not self.api_key:
@@ -112,7 +112,7 @@ class GeminiProvider(BaseModelProvider):
         system_prompt: Optional[str] = None,
         model_name: Optional[str] = None,
         temperature: float = 0.2,
-        max_tokens: int = 2048,
+        max_tokens: int = 512,
     ) -> AsyncIterator[str]:
         """Stream response tokens from Gemini API in real-time."""
         if not self.api_key:

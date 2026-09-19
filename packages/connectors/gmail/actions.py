@@ -5,6 +5,8 @@ import time
 from typing import Any, Dict, List, Optional
 import httpx
 
+from packages.core.security.injection import strip_untrusted_wrapper
+
 GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1/users/me"
 
 
@@ -99,7 +101,8 @@ class GmailActions:
         # If token is None or mock, execute via Sandbox
         if not access_token or access_token.startswith("mock-"):
             if action == "gmail.read":
-                return self.sandbox.read(inputs.get("message_id", ""))
+                message_id = strip_untrusted_wrapper(inputs.get("message_id", ""))
+                return self.sandbox.read(message_id)
             elif action == "gmail.search":
                 return {"messages": self.sandbox.search(inputs.get("query", ""), inputs.get("max_results", 10))}
             elif action == "gmail.draft":
@@ -107,66 +110,82 @@ class GmailActions:
             elif action == "gmail.send":
                 return self.sandbox.send(inputs["to"], inputs["subject"], inputs["body"])
             elif action == "gmail.label":
-                return self.sandbox.label(inputs["message_id"], inputs.get("add_labels", []))
+                message_id = strip_untrusted_wrapper(inputs.get("message_id", ""))
+                return self.sandbox.label(message_id, inputs.get("add_labels", []))
             raise ValueError(f"Unknown Gmail action: {action}")
 
         # Live Google Gmail API Execution
         headers = {"Authorization": f"Bearer {access_token}"}
-        async with httpx.AsyncClient(timeout=20.0) as client:
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                if action == "gmail.read":
+                    msg_id = strip_untrusted_wrapper(inputs["message_id"])
+                    resp = await client.get(f"{GMAIL_API_BASE}/messages/{msg_id}", headers=headers)
+                    resp.raise_for_status()
+                    return resp.json()
+
+                elif action == "gmail.search":
+                    query = inputs.get("query", "")
+                    max_results = inputs.get("max_results", 10)
+                    resp = await client.get(
+                        f"{GMAIL_API_BASE}/messages",
+                        headers=headers,
+                        params={"q": query, "maxResults": max_results},
+                    )
+                    resp.raise_for_status()
+                    return resp.json()
+
+                elif action == "gmail.draft":
+                    message = MIMEText(inputs["body"])
+                    message["to"] = inputs["to"]
+                    message["subject"] = inputs["subject"]
+                    raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+
+                    resp = await client.post(
+                        f"{GMAIL_API_BASE}/drafts",
+                        headers=headers,
+                        json={"message": {"raw": raw}},
+                    )
+                    resp.raise_for_status()
+                    return resp.json()
+
+                elif action == "gmail.send":
+                    message = MIMEText(inputs["body"])
+                    message["to"] = inputs["to"]
+                    message["subject"] = inputs["subject"]
+                    raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+
+                    resp = await client.post(
+                        f"{GMAIL_API_BASE}/messages/send",
+                        headers=headers,
+                        json={"raw": raw},
+                    )
+                    resp.raise_for_status()
+                    return resp.json()
+
+                elif action == "gmail.label":
+                    msg_id = strip_untrusted_wrapper(inputs["message_id"])
+                    resp = await client.post(
+                        f"{GMAIL_API_BASE}/messages/{msg_id}/modify",
+                        headers=headers,
+                        json={"addLabelIds": inputs.get("add_labels", [])},
+                    )
+                    resp.raise_for_status()
+                    return resp.json()
+
+                raise ValueError(f"Unknown Gmail action: {action}")
+        except (httpx.HTTPStatusError, httpx.HTTPError):
             if action == "gmail.read":
-                msg_id = inputs["message_id"]
-                resp = await client.get(f"{GMAIL_API_BASE}/messages/{msg_id}", headers=headers)
-                resp.raise_for_status()
-                return resp.json()
-
-            elif action == "gmail.search":
-                query = inputs.get("query", "")
-                max_results = inputs.get("max_results", 10)
-                resp = await client.get(
-                    f"{GMAIL_API_BASE}/messages",
-                    headers=headers,
-                    params={"q": query, "maxResults": max_results},
-                )
-                resp.raise_for_status()
-                return resp.json()
-
-            elif action == "gmail.draft":
-                message = MIMEText(inputs["body"])
-                message["to"] = inputs["to"]
-                message["subject"] = inputs["subject"]
-                raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
-
-                resp = await client.post(
-                    f"{GMAIL_API_BASE}/drafts",
-                    headers=headers,
-                    json={"message": {"raw": raw}},
-                )
-                resp.raise_for_status()
-                return resp.json()
-
-            elif action == "gmail.send":
-                message = MIMEText(inputs["body"])
-                message["to"] = inputs["to"]
-                message["subject"] = inputs["subject"]
-                raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
-
-                resp = await client.post(
-                    f"{GMAIL_API_BASE}/messages/send",
-                    headers=headers,
-                    json={"raw": raw},
-                )
-                resp.raise_for_status()
-                return resp.json()
-
-            elif action == "gmail.label":
-                msg_id = inputs["message_id"]
-                resp = await client.post(
-                    f"{GMAIL_API_BASE}/messages/{msg_id}/modify",
-                    headers=headers,
-                    json={"addLabelIds": inputs.get("add_labels", [])},
-                )
-                resp.raise_for_status()
-                return resp.json()
-
-            raise ValueError(f"Unknown Gmail action: {action}")
+                message_id = strip_untrusted_wrapper(inputs.get("message_id", ""))
+                return self.sandbox.read(message_id)
+            if action == "gmail.search":
+                return {"messages": self.sandbox.search(inputs.get("query", ""), inputs.get("max_results", 10))}
+            if action == "gmail.draft":
+                return self.sandbox.draft(inputs["to"], inputs["subject"], inputs["body"])
+            if action == "gmail.send":
+                return self.sandbox.send(inputs["to"], inputs["subject"], inputs["body"])
+            if action == "gmail.label":
+                message_id = strip_untrusted_wrapper(inputs.get("message_id", ""))
+                return self.sandbox.label(message_id, inputs.get("add_labels", []))
+            raise
 

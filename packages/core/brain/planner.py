@@ -41,6 +41,12 @@ CAPABILITY_CONNECTOR_MAP = {
     "sheets.read_rows": ("connector-gsheets", SideEffectType.READ),
     "sheets.append_rows": ("connector-gsheets", SideEffectType.WRITE),
     "sheets.update_cell": ("connector-gsheets", SideEffectType.WRITE),
+    "web.search": ("connector-websearch", SideEffectType.READ),
+    "host.open_app": ("connector-host-agent", SideEffectType.WRITE),
+    "host.type_text": ("connector-host-agent", SideEffectType.WRITE),
+    "host.file_op": ("connector-host-agent", SideEffectType.DESTRUCTIVE),
+    "host.run_script": ("connector-host-agent", SideEffectType.EXTERNAL_SEND),
+    "host.read_screen": ("connector-host-agent", SideEffectType.READ),
 }
 
 

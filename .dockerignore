@@ -1,0 +1,30 @@
+# Git & Version Control
+.git
+.gitignore
+
+# Python virtual environments & cache
+.venv
+venv
+ENV
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node.js & Frontend build artifacts
+apps/web/node_modules/
+apps/web/.next/
+apps/web/out/
+apps/web/build/
+*.tsbuildinfo
+
+# Host agent & standalone executables
+Sara-win32-x64/
+*.log
+*.pdf
+
+# Environment files with local secrets
+.env.local

@@ -24,7 +24,7 @@ config = context.config
 # Override sqlalchemy.url from environment variable if available
 database_url = os.getenv(
     "DATABASE_URL",
-    "postgresql+asyncpg://omnibrain:omnibrain_dev@postgres:5432/omnibrain",
+    "postgresql+asyncpg://omnibrain:omnibrain_dev@localhost:5432/omnibrain",
 )
 config.set_main_option("sqlalchemy.url", database_url)
 
