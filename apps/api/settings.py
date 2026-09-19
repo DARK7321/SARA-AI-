@@ -17,8 +17,8 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = 'INFO'
     OWNER_EMAIL: str = 'admin@omnibrain.local'
     OWNER_PASSWORD: str = 'OmniBrain@2026'
-    GOOGLE_CLIENT_ID: str = 'mock-google-client-id'
-    GOOGLE_CLIENT_SECRET: str = 'mock-google-secret'
+    GOOGLE_CLIENT_ID: str = '279884272633-h83038hv52ovkk2r35tne2nbqofnqv0f.apps.googleusercontent.com'
+    GOOGLE_CLIENT_SECRET: str = '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'
 
     model_config = SettingsConfigDict(env_file='.env', extra='allow')
 
