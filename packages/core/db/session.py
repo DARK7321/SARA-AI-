@@ -19,6 +19,10 @@ engine = create_async_engine(
     future=True,
     poolclass=NullPool if is_testing else AsyncAdaptedQueuePool,
     pool_pre_ping=True,
+    connect_args={
+        "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0,
+    },
 )
 
 async_session_maker = async_sessionmaker(
