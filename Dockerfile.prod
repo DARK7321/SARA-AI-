@@ -13,9 +13,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+RUN chmod +x start_prod.sh
+
 ENV PYTHONUNBUFFERED=1
 ENV APP_ENV=production
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn apps.api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["./start_prod.sh"]

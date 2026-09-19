@@ -28,3 +28,4 @@ Sara-win32-x64/
 
 # Environment files with local secrets
 .env.local
+

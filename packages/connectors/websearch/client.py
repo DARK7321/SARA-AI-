@@ -29,6 +29,8 @@ class WebSearchConnector(BaseConnector):
                 query = request.input.get("query")
                 max_results = request.input.get("max_results", 3)
                 results = self._search(query, max_results)
+                from packages.core.security.injection import wrap_dict
+                results = wrap_dict("websearch", results)
                 latency_ms = int((time.time() - start_time) * 1000)
                 return ToolResponse(
                     success=True,
@@ -60,4 +62,13 @@ class WebSearchConnector(BaseConnector):
                     "snippet": r.get("body", "")
                 })
         return results
+
+    async def health_check(self) -> Dict[str, Any]:
+        return {
+            "status": "ONLINE",
+            "connector_id": self.connector_id
+        }
+
+    def get_capabilities(self) -> List[str]:
+        return ["web.search"]
 

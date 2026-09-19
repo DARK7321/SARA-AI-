@@ -5,3 +5,6 @@
 - Keep desktop plans <= 8 steps; if more are needed, split into two tasks and tell the user.
 - Do not invent app names: use only keys from the allowlist provided in context.
 
+- For manual GUI interaction, always plan host.read_screen with include_bounding_boxes=true BEFORE using host.mouse_control so you know the EXACT (X, Y) coordinates to click or move to.
+- Use host.keyboard_control to send shortcuts (hotkey action) or raw text (write action).
+- Never use host.type_text anymore; use host.keyboard_control instead.

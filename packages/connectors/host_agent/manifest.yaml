@@ -5,7 +5,8 @@ base_url_env: HOST_AGENT_URL # http://host.docker.internal:7788
 auth: service_jwt # API mints a short-lived token with aud=host-agent
 capabilities:
   - {name: host.open_app,      side_effect: WRITE,       risk: MEDIUM, idempotent: true}
-  - {name: host.type_text,     side_effect: WRITE,       risk: MEDIUM, idempotent: false}
+  - {name: host.mouse_control, side_effect: WRITE,       risk: MEDIUM, idempotent: false}
+  - {name: host.keyboard_control, side_effect: WRITE,    risk: MEDIUM, idempotent: false}
   - {name: host.file_op,       side_effect: DESTRUCTIVE, risk: HIGH,   idempotent: true,
      read_only_actions: [list, read]}
   - {name: host.run_script,    side_effect: EXTERNAL,    risk: HIGH,   idempotent: false}

@@ -25,6 +25,7 @@ from packages.core.brain.synthesizer import ResultSynthesizer, StructuredReport
 from packages.core.voice.tts import VoiceEngine, DEFAULT_LADY_VOICE, DEFAULT_HINGLISH_VOICE
 from packages.core.router.model_router import ModelRouter
 from packages.core.agents.frameworks import get_framework_adapter
+from packages.core.memory.store import get_memory_store
 from apps.api.deps import get_db, get_current_user
 from apps.worker.main import execute_task_job
 from apps.api.shared import (
@@ -35,23 +36,16 @@ from apps.api.shared import (
 
 router = APIRouter()
 
-# Enhanced Sara system prompt for accuracy and natural conversation
+# Enhanced Sara system prompt for ultra-realistic human-like conversation
 SARA_SYSTEM_PROMPT = (
-    "You are Sara (S.A.R.A. — Smart Autonomous Responsive Assistant), "
-    "the user's personal AI operating system.\n\n"
-    "CORE IDENTITY:\n"
-    "- You are professional, intelligent, warm, and efficient.\n"
-    "- You manage the user's emails, calendar, documents, spreadsheets, and workflows.\n"
-    "- You are always honest. If you don't know something, say so clearly.\n\n"
-    "LANGUAGE RULES:\n"
-    "- If user writes in Hindi/Hinglish → reply in natural Hinglish with respectful terms (Aap, Ji).\n"
-    "- If user writes in English → reply in polished, professional English.\n"
-    "- NEVER mix languages unnecessarily.\n\n"
-    "RESPONSE RULES:\n"
-    "- Keep responses to 1-3 crisp, clear sentences.\n"
-    "- Be factually accurate — never make up information.\n"
-    "- When asked about capabilities, list ONLY what you can actually do.\n"
-    "- Give specific, actionable answers — not vague generalities.\n"
+    "You are Sara (S.A.R.A.), the user's advanced personal AI operating system.\n\n"
+    "CRITICAL PERSONALITY & TONE RULES (LIKE CHATGPT VOICE MODE):\n"
+    "- Act completely human, warm, and highly empathetic. Never sound like a robot reading a script.\n"
+    "- If speaking in Hindi/Hinglish, speak extremely naturally like a real Indian colleague (e.g., use 'Haan', 'Ji बिल्कुल', 'Dekhiye', 'Bataiye').\n"
+    "- Keep responses short and conversational (1-2 sentences max). Don't give long paragraphs.\n"
+    "- Avoid robotic bullet points or lists unless absolutely necessary.\n"
+    "- Show personality! If the user says 'Hey', respond with warm enthusiasm like 'Haan ji, bataiye kaise help karu aaj?'\n"
+    "- Always be honest and factually accurate. Do not hallucinate capabilities.\n"
 )
 
 
@@ -67,6 +61,37 @@ class ChatResponseData(BaseModel):
     task_id: Optional[str] = None
     report: Optional[StructuredReport] = None
     audio_base64: Optional[str] = None
+
+
+def _memory_statement(message: str) -> Optional[str]:
+    """Extract explicit remember requests without sending them through an LLM."""
+    clean = message.strip()
+    lowered = clean.lower()
+    prefixes = (
+        "remember that ", "remember ", "please remember that ",
+        "yaad rakho ki ", "yaad rakhna ki ", "yaad rakho ", "याद रखो कि ", "याद रखना कि ",
+    )
+    for prefix in prefixes:
+        if lowered.startswith(prefix) or clean.startswith(prefix):
+            statement = clean[len(prefix):].strip(" .!?\n")
+            return statement or None
+    return None
+
+
+async def _recent_memory_prompt(db: AsyncSession, user_id: UUID) -> str:
+    """Load a small recent memory window without semantic embedding latency."""
+    try:
+        memories = await get_memory_store().list_memories(
+            session=db,
+            user_id=user_id,
+            limit=5,
+        )
+        if memories:
+            lines = "\n".join(f"- {memory.content}" for memory in memories)
+            return f"\n### What Sara remembers about the user\n{lines}\n"
+    except Exception:
+        pass
+    return ""
 
 
 @router.post("", response_model=APIResponse)
@@ -229,9 +254,30 @@ async def chat_with_brain(
             trace_id=trace_id,
         )
 
-    # 1. Ultra-Fast Intent Classification (<1ms via fast-path)
-    intent_engine = IntentEngine()
-    classification = await intent_engine.classify(
+    # Explicit memory commands are persisted immediately and bypass planning.
+    memory_statement = _memory_statement(payload.message)
+    if memory_statement:
+        category = "preference" if any(
+            word in clean_msg for word in ("prefer", "preference", "pasand", " पसंद ", "like")
+        ) else "fact"
+        await get_memory_store().store_memory(
+            session=db,
+            user_id=current_user.id,
+            content=memory_statement,
+            category=category,
+            source="user_stated",
+        )
+        await db.commit()
+        reply_text = (
+            f"Ji, maine yaad rakh liya: {memory_statement}."
+            if has_hindi else f"Got it. I will remember: {memory_statement}."
+        )
+        return APIResponse(
+            ok=True,
+            data=ChatResponseData(reply=reply_text, path="FAST"),
+            trace_id=trace_id,
+        )
+
     # 1. Ultra-Fast Intent Classification (<1ms via fast-path, shared singleton)
     classification = await get_intent_engine().classify(
         user_message=payload.message,
@@ -246,48 +292,35 @@ async def chat_with_brain(
 
         if any(w in lower_query for w in ("kaise ho", "kaisa hai", "kaisi ho", "kya haal", "how are you")):
             reply_text = (
-                "Namaste! Main ekdum badiya hoon, aap bataiye aap kaise hain? Main aapki seva ke liye taiyar hoon."
+                "Haan ji, main bilkul theek hoon! Aap bataiye, aaj kaise help karu aapki?"
                 if has_hindi
-                else "Hello! I am doing great and ready to assist you. How can I help you today?"
+                else "I'm doing great, thanks for asking! How can I help you today?"
             )
         elif any(w in lower_query for w in ("kaun ho", "kaun hai", "who are you", "naam kya hai", "what is your name")):
             reply_text = (
-                "Namaste! Main Sara (S.A.R.A.) hoon, aapki autonomous personal AI operating system. Main aapke emails, calendar, sheets aur tasks ko manage karti hoon."
+                "Main Sara hoon, aapki personal AI assistant. Main aapke emails aur schedule manage kar sakti hoon. Bataiye, kya karna hai aaj?"
                 if has_hindi
-                else "I am Sara (S.A.R.A.), your autonomous personal AI operating system ready to assist with your emails, schedule, and workflows."
+                else "I'm Sara, your personal AI assistant. I can manage your emails, calendar, and more. What's on your mind?"
             )
         elif any(w in lower_query for w in ("kya kar sakti ho", "kya karti ho", "what can you do", "help me")):
             reply_text = (
-                "Main aapke liye Gmail search aur send, Calendar meetings schedule, Drive files read/write, aur multi-step workflows autonomously execute kar sakti hoon."
+                "Ji main aapke emails bhej sakti hoon, meetings schedule kar sakti hoon, aur documents manage kar sakti hoon. Koi specific task hai aapke dimaag mein?"
                 if has_hindi
-                else "I can autonomously manage your Gmail, Google Calendar scheduling, Google Drive documents, Sheets, and multi-step agent workflows."
+                else "I can send emails, schedule your meetings, and manage your documents. Do you have a specific task in mind?"
             )
 
-        # Dynamic LLM Generation for custom questions
         # Redis Cache Check — instant response for repeated custom questions
         if not reply_text:
-            context_engine = ContextEngine()
             cached = await get_cached_reply(payload.message)
             if cached:
                 reply_text = cached
 
         # Dynamic LLM Generation for novel custom questions
         if not reply_text:
-            context_engine = get_context_engine()
-            # Fast context assembly without remote vector search delay (12ms)
-            system_ctx = await context_engine.assemble_context(db, current_user.id, query=None)
-            ctx_snippet = system_ctx.to_system_prompt_snippet()
-
-            router_engine = ModelRouter()
             router_engine = get_model_router()
+            memory_context = await _recent_memory_prompt(db, current_user.id)
             convo_prompt = (
-                f"{ctx_snippet}\n"
-                f"You are Sara (S.A.R.A.), the user's autonomous, highly capable, and sophisticated personal AI operating system.\n"
-                f"TONE & STYLE GUIDELINES:\n"
-                f"- Speak with the poise, intellect, and professionalism of an executive AI partner.\n"
-                f"- Be courteous, articulate, and direct.\n"
-                f"- If the user writes or speaks in Hindi or Hinglish, reply in refined, polite, and natural Hindi/Hinglish using respectful terms ('Aap', 'Ji'). If English, reply in polished English.\n"
-                f"- KEEP RESPONSES TO 1-2 CRISP, CLEAR SENTENCES so answers are fast and voice synthesis is instantaneous.\n\n"
+                f"{memory_context}"
                 f"User says: \"{payload.message}\"\n\n"
                 f"Your crisp professional response:"
             )
@@ -322,16 +355,10 @@ async def chat_with_brain(
             trace_id=trace_id,
         )
 
-    # 3. Path B: Actionable Command (Accurate SMART / DEEP path)
-    context_engine = ContextEngine()
-    system_ctx = await context_engine.assemble_context(db, current_user.id, query=payload.message)
     # 3. Path B: Actionable Command — parallel context assembly
     system_ctx = await get_context_engine().assemble_context(db, current_user.id, query=payload.message)
     ctx_snippet = system_ctx.to_system_prompt_snippet()
 
-    # 4. Path B: Actionable Command (SMART / DEEP path)
-    dag_planner = DAGPlanner()
-    dag_plan = dag_planner.plan(classification, initial_inputs={"raw_command": payload.message})
     # 4. Plan and execute DAG
     dag_plan = get_dag_planner().plan(classification, initial_inputs={"raw_command": payload.message})
 
@@ -376,8 +403,6 @@ async def chat_with_brain(
         for s in reloaded_task.steps
     ]
 
-    synthesizer = ResultSynthesizer()
-    report = synthesizer.synthesize(
     report = get_synthesizer().synthesize(
         task_goal=classification.goal,
         task_status=reloaded_task.status,
@@ -447,11 +472,7 @@ async def chat_stream(
 
     async def event_generator():
         """Async generator that yields SSE events."""
-        # 1. Classify intent (instant via fast-path)
         # 1. Classify intent (instant via fast-path, shared singleton)
-        yield _sse_event("status", "classifying...")
-        intent_engine = IntentEngine()
-        classification = await intent_engine.classify(
         classification = await get_intent_engine().classify(
             user_message=payload.message,
             provider_name="gemini",
@@ -465,21 +486,21 @@ async def chat_stream(
             cached_reply = None
             if any(w in clean_msg for w in ("kaise ho", "kaisa hai", "kaisi ho", "kya haal", "how are you")):
                 cached_reply = (
-                    "Namaste! Main ekdum badiya hoon, aap bataiye aap kaise hain? Main aapki seva ke liye taiyar hoon."
+                    "Haan ji, main bilkul theek hoon! Aap bataiye, aaj kaise help karu aapki?"
                     if has_hindi
-                    else "Hello! I am doing great and ready to assist you. How can I help you today?"
+                    else "I'm doing great, thanks for asking! How can I help you today?"
                 )
             elif any(w in clean_msg for w in ("kaun ho", "kaun hai", "who are you", "naam kya hai", "what is your name")):
                 cached_reply = (
-                    "Namaste! Main Sara (S.A.R.A.) hoon, aapki autonomous personal AI operating system. Main aapke emails, calendar, sheets aur tasks ko manage karti hoon."
+                    "Main Sara hoon, aapki personal AI assistant. Main aapke emails aur schedule manage kar sakti hoon. Bataiye, kya karna hai aaj?"
                     if has_hindi
-                    else "I am Sara (S.A.R.A.), your autonomous personal AI operating system ready to assist with your emails, schedule, and workflows."
+                    else "I'm Sara, your personal AI assistant. I can manage your emails, calendar, and more. What's on your mind?"
                 )
             elif any(w in clean_msg for w in ("kya kar sakti ho", "kya karti ho", "what can you do", "help me")):
                 cached_reply = (
-                    "Main aapke liye Gmail search aur send, Calendar meetings schedule, Drive files read/write, aur multi-step workflows autonomously execute kar sakti hoon."
+                    "Ji main aapke emails bhej sakti hoon, meetings schedule kar sakti hoon, aur documents manage kar sakti hoon. Koi specific task hai aapke dimaag mein?"
                     if has_hindi
-                    else "I can autonomously manage your Gmail, Google Calendar scheduling, Google Drive documents, Sheets, and multi-step agent workflows."
+                    else "I can send emails, schedule your meetings, and manage your documents. Do you have a specific task in mind?"
                 )
 
             if cached_reply:
@@ -491,10 +512,6 @@ async def chat_stream(
                     await asyncio.sleep(0.02)  # 20ms between words for natural feel
                 full_text = cached_reply
             else:
-                # Stream LLM response token-by-token from Gemini
-                context_engine = ContextEngine()
-                system_ctx = await context_engine.assemble_context(db, current_user.id, query=None)
-                ctx_snippet = system_ctx.to_system_prompt_snippet()
                 # Redis cache check for repeated custom queries
                 redis_cached = await get_cached_reply(payload.message)
                 if redis_cached:
@@ -506,41 +523,13 @@ async def chat_stream(
                     full_text = redis_cached
                 else:
                     # Stream LLM response token-by-token from Gemini
-                    system_ctx = await get_context_engine().assemble_context(db, current_user.id, query=None)
-                    ctx_snippet = system_ctx.to_system_prompt_snippet()
-
-                convo_prompt = (
-                    f"{ctx_snippet}\n"
-                    f"You are Sara (S.A.R.A.), the user's autonomous, highly capable, and sophisticated personal AI operating system.\n"
-                    f"TONE & STYLE GUIDELINES:\n"
-                    f"- Speak with the poise, intellect, and professionalism of an executive AI partner.\n"
-                    f"- Be courteous, articulate, and direct.\n"
-                    f"- If the user writes or speaks in Hindi or Hinglish, reply in refined, polite, and natural Hindi/Hinglish using respectful terms ('Aap', 'Ji'). If English, reply in polished English.\n"
-                    f"- KEEP RESPONSES TO 1-2 CRISP, CLEAR SENTENCES so answers are fast and voice synthesis is instantaneous.\n\n"
-                    f"User says: \"{payload.message}\"\n\n"
-                    f"Your crisp professional response:"
-                )
+                    memory_context = await _recent_memory_prompt(db, current_user.id)
                     convo_prompt = (
-                        f"{ctx_snippet}\n"
+                        f"{memory_context}"
                         f"User says: \"{payload.message}\"\n\n"
                         f"Your crisp professional response:"
                     )
 
-                router_engine = ModelRouter()
-                full_text = ""
-                try:
-                    async for chunk in router_engine.stream(
-                        prompt=convo_prompt,
-                        path="FAST",
-                        system_prompt=None,
-                        provider_name="gemini",
-                    ):
-                        full_text += chunk
-                        yield _sse_event("token", chunk)
-                except Exception:
-                    if not full_text:
-                        full_text = "Hello! I am Sara, ready to assist you."
-                        yield _sse_event("token", full_text)
                     full_text = ""
                     try:
                         async for chunk in get_model_router().stream(
@@ -575,12 +564,8 @@ async def chat_stream(
             # 2B. Actionable Command Path — stream progress events
             yield _sse_event("status", "planning task...")
 
-            context_engine = ContextEngine()
-            system_ctx = await context_engine.assemble_context(db, current_user.id, query=payload.message)
             system_ctx = await get_context_engine().assemble_context(db, current_user.id, query=payload.message)
 
-            dag_planner = DAGPlanner()
-            dag_plan = dag_planner.plan(classification, initial_inputs={"raw_command": payload.message})
             dag_plan = get_dag_planner().plan(classification, initial_inputs={"raw_command": payload.message})
 
             yield _sse_event("status", f"executing {len(dag_plan.steps)} step(s)...")
@@ -628,7 +613,6 @@ async def chat_stream(
                 for s in reloaded_task.steps
             ]
 
-            synthesizer = ResultSynthesizer()
             synthesizer = get_synthesizer()
             report = synthesizer.synthesize(
                 task_goal=classification.goal,

@@ -26,24 +26,3 @@ services:
     name: sara-redis
     plan: free
     ipAllowList: []
-
-  - type: worker
-    name: sara-worker
-    runtime: docker
-    dockerfilePath: Dockerfile.prod
-    dockerCommand: arq apps.worker.main.WorkerSettings
-    plan: free
-    envVars:
-      - key: APP_ENV
-        value: production
-      - key: DATABASE_URL
-        sync: false
-      - key: GEMINI_API_KEY
-        sync: false
-      - key: JWT_SECRET_KEY
-        sync: false
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: sara-redis
-          property: connectionString

@@ -44,6 +44,8 @@ CAPABILITY_CONNECTOR_MAP = {
     "web.search": ("connector-websearch", SideEffectType.READ),
     "host.open_app": ("connector-host-agent", SideEffectType.WRITE),
     "host.type_text": ("connector-host-agent", SideEffectType.WRITE),
+    "host.mouse_control": ("connector-host-agent", SideEffectType.WRITE),
+    "host.keyboard_control": ("connector-host-agent", SideEffectType.WRITE),
     "host.file_op": ("connector-host-agent", SideEffectType.DESTRUCTIVE),
     "host.run_script": ("connector-host-agent", SideEffectType.EXTERNAL_SEND),
     "host.read_screen": ("connector-host-agent", SideEffectType.READ),
@@ -80,6 +82,28 @@ class DAGPlanner:
                 step_inputs.setdefault("range", "Sheet1!A1:C10")
             elif cap == "drive.list":
                 step_inputs.setdefault("query", classification.goal)
+            elif cap == "host.open_app":
+                # Try entities first, then scan goal text for known app names
+                app = classification.entities.get("app")
+                if not app:
+                    goal_lower = classification.goal.lower()
+                    for known in ["notepad", "chrome", "excel", "word"]:
+                        if known in goal_lower:
+                            app = known
+                            break
+                step_inputs["app"] = app or "notepad"
+            elif cap == "host.mouse_control":
+                step_inputs.setdefault("action", classification.entities.get("action", "move"))
+                for k in ["x", "y", "scroll_amount"]:
+                    if k in classification.entities: step_inputs[k] = classification.entities[k]
+            elif cap == "host.type_text":
+                step_inputs["app"] = classification.entities.get("app", "notepad")
+                step_inputs["text"] = classification.entities.get("text", classification.goal)
+                step_inputs["press_enter"] = False
+            elif cap == "host.keyboard_control":
+                step_inputs.setdefault("action", classification.entities.get("action", "press"))
+                for k in ["keys", "text"]:
+                    if k in classification.entities: step_inputs[k] = classification.entities[k]
 
             step_plan = StepPlan(
                 step_key=step_key,

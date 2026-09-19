@@ -94,7 +94,7 @@ async def execute_task_job(
         browser_connector = BrowserConnector()
         mcp_connector = MCPConnector()
         websearch_connector = WebSearchConnector()
-        host_agent_connector = HostAgentConnector()
+        host_agent_connector = None
 
         task_failed = False
         waiting_approval = False
@@ -102,6 +102,15 @@ async def execute_task_job(
         for step in steps:
             if step.status in ("SUCCEEDED", "SKIPPED"):
                 continue
+
+            # Check Kill Switch mid-execution
+            if await emergency_kill_switch.is_active():
+                step.status = "FAILED"
+                step.result = {"error": "Emergency Kill Switch activated during execution."}
+                task.status = "FAILED"
+                task.result = {"error": "Emergency Kill Switch activated mid-flight."}
+                await s.flush()
+                return {"status": "failed", "error": "Emergency Kill Switch active mid-flight"}
 
             # Acquire step lease
             now = datetime.now(timezone.utc)
@@ -127,6 +136,8 @@ async def execute_task_job(
             elif cap.startswith("browser."):
                 connector = browser_connector
             elif cap.startswith("host."):
+                if host_agent_connector is None:
+                    host_agent_connector = HostAgentConnector()
                 connector = host_agent_connector
             elif cap.startswith("mcp."):
                 connector = mcp_connector

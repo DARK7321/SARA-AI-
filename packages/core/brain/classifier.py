@@ -20,7 +20,7 @@ class TaskClassification(BaseModel):
     goal: str = Field(description="Normalized concise summary of user intent")
     entities: Dict[str, Any] = Field(
         default_factory=dict,
-        description="Extracted entities such as recipient, date, topic, filename"
+        description="Extracted entities. For host.mouse_control include 'action' (click, move, drag, scroll) and 'x', 'y'. For host.keyboard_control include 'action' (press, hotkey, write), 'keys' (list of strings like ['alt', 'f4']) or 'text'."
     )
     required_capabilities: List[str] = Field(
         default_factory=list,
@@ -36,11 +36,20 @@ CLASSIFIER_SYSTEM_PROMPT = """You are the Intent and Task Classifier for OmniBra
 Analyze user messages and classify them into:
 1. is_conversational: True if the user is saying hello, asking who you are, or seeking advice/information without needing external tools. False if they want you to perform an action (read email, schedule event, update sheet, delete file, etc.).
 2. path:
-   - FAST: simple information lookup or 1 read tool (latency <1s).
+- FAST: simple information lookup or 1 read tool (latency <1s).
    - SMART: 2-4 coordinated tool steps (e.g. read email, summarize, save to drive or sheet).
    - DEEP: complex multi-stage tasks requiring subagents and extensive reasoning.
-3. required_capabilities: choose from [gmail.read, gmail.search, gmail.draft, gmail.send, drive.list, drive.read, drive.create, drive.share, calendar.list_events, calendar.create_event, sheets.read_rows, sheets.append_rows, sheets.update_cell, web.search, host.open_app, host.type_text, host.file_op, host.run_script, host.read_screen].
+3. required_capabilities: choose from [gmail.read, gmail.search, gmail.draft, gmail.send, drive.list, drive.read, drive.create, drive.share, calendar.list_events, calendar.create_event, sheets.read_rows, sheets.append_rows, sheets.update_cell, web.search, host.open_app, host.mouse_control, host.keyboard_control, host.file_op, host.run_script, host.read_screen].
 4. estimated_risk: LOW for reading, MEDIUM for creating drafts/typing, HIGH for sending emails, running scripts, or deleting items.
+
+CRITICAL EXAMPLES:
+- "minimize all windows" -> is_conversational=False, required_capabilities=["host.keyboard_control"], entities={"action": "hotkey", "keys": ["win", "m"]}
+- "close window" -> is_conversational=False, required_capabilities=["host.keyboard_control"], entities={"action": "hotkey", "keys": ["alt", "f4"]}
+- "click on X" -> is_conversational=False, required_capabilities=["host.read_screen", "host.mouse_control"]
+- "open notepad" -> is_conversational=False, required_capabilities=["host.open_app"], entities={"app": "notepad"}
+- "open chrome" -> is_conversational=False, required_capabilities=["host.open_app"], entities={"app": "chrome"}
+- "type in notepad: Hello" -> is_conversational=False, path="SMART", required_capabilities=["host.open_app", "host.type_text"], entities={"app": "notepad", "text": "Hello"}
+- "notepad kholke Hello likho" -> is_conversational=False, path="SMART", required_capabilities=["host.open_app", "host.type_text"], entities={"app": "notepad", "text": "Hello"}
 """
 
 
@@ -77,48 +86,14 @@ class IntentEngine:
             req_caps.append("sheets.read_rows")
         if any(w in lower_msg for w in ["drive", "file", "doc", "ड्राइव", "फाइल", "folder"]):
             req_caps.append("drive.list")
-        if any(w in lower_msg for w in ["notepad", "excel", "word", "chrome", "app", "script", "window"]):
-            req_caps.append("host.open_app")
 
         # Action verbs indicating tool execution intent
         action_intent_words = [
             "send", "draft", "create", "delete", "remove", "schedule", "update", "append",
             "search inbox", "check mail", "read mail", "check calendar", "bhejo", "banao",
-            "likho", "karo", "hatao", "dhundo", "open", "type", "run", "kholo", "chalao", "start"
+            "likho", "karo", "hatao", "dhundo", "open", "type", "run", "kholo", "chalao", "start", "minimize", "close", "band"
         ]
         has_action_intent = bool(req_caps) or any(w in lower_msg for w in action_intent_words)
-
-        # Zero-latency Conversational & Tool Action Bypass:
-        # Greetings, general queries, and direct tool commands are classified instantly (<1ms) with 100% precision.
-        if provider_name != "mock":
-            if is_chat and not has_action_intent:
-                return TaskClassification(
-                    is_conversational=True,
-                    path="FAST",
-                    goal=user_message[:100],
-                    entities={},
-                    required_capabilities=[],
-                    estimated_risk="LOW",
-                )
-            if not has_action_intent:
-                return TaskClassification(
-                    is_conversational=True,
-                    path="FAST",
-                    goal=user_message[:100],
-                    entities={},
-                    required_capabilities=[],
-                    estimated_risk="LOW",
-                )
-            # Direct tool commands (check inbox, calendar, sheets, drive)
-            if req_caps and not any(w in lower_msg for w in ["why", "explain", "how does", "what is"]):
-                return TaskClassification(
-                    is_conversational=False,
-                    path="SMART" if len(req_caps) > 1 else "FAST",
-                    goal=user_message[:100],
-                    entities={"query": user_message},
-                    required_capabilities=req_caps,
-                    estimated_risk="HIGH" if any(w in lower_msg for w in ["send", "delete", "remove"]) else "LOW",
-                )
 
         prompt = (
             f"{system_context_snippet}\n"
@@ -150,6 +125,14 @@ class IntentEngine:
         is_chat = any(w in lower_msg for w in ["hello", "hi", "hey", "who are you", "what can you do", "help"] + hindi_chat_phrases)
         
         req_caps = []
+        desktop_apps = {
+            "notepad": "notepad",
+            "calculator": "calculator",
+            "calc": "calculator",
+            "paint": "paint",
+            "explorer": "explorer",
+        }
+        requested_app = next((name for name in desktop_apps if name in lower_msg), None)
         if any(w in lower_msg for w in ["mail", "inbox", "email", "ईमेल", "मेल"]):
             req_caps.append("gmail.search")
         if any(w in lower_msg for w in ["meeting", "calendar", "schedule", "कैलेंडर", "मीटिंग"]):
@@ -158,23 +141,27 @@ class IntentEngine:
             req_caps.append("sheets.read_rows")
         if any(w in lower_msg for w in ["drive", "file", "doc", "ड्राइव", "फाइल"]):
             req_caps.append("drive.list")
+        if requested_app or any(w in lower_msg for w in ["excel", "word", "chrome", "app", "window"]):
+            req_caps.append("host.open_app")
+        if any(w in lower_msg for w in ["type", "write", "likho", "टाइप", "लिखो"]):
+            req_caps.extend(["host.type_text", "host.read_screen"])
 
         # Action verbs indicating tool execution intent
         action_intent_words = [
             "send", "draft", "create", "delete", "remove", "schedule", "update", "append",
             "search inbox", "check mail", "read mail", "check calendar", "bhejo", "banao",
-            "likho", "karo", "hatao", "dhundo"
+            "likho", "karo", "hatao", "dhundo", "open", "type", "write", "run", "minimize", "close", "band", "start"
         ]
         has_action_intent = bool(req_caps) or any(w in lower_msg for w in action_intent_words)
         
         # Any question or statement without explicit action verbs is conversational
-        is_conversational = (not has_action_intent) or is_chat
+        is_conversational = (not has_action_intent) and is_chat
 
         return TaskClassification(
             is_conversational=is_conversational,
             path="SMART" if len(req_caps) > 1 else "FAST",
             goal=user_message[:100],
-            entities={},
+            entities={"query": user_message},
             required_capabilities=[] if is_conversational else req_caps,
             estimated_risk="HIGH" if any(w in lower_msg for w in ["send", "delete"]) else "LOW",
         )
