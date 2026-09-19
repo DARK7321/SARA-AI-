@@ -1,3 +1,5 @@
+from typing import Any
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 
@@ -19,6 +21,13 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = 'mock-google-secret'
 
     model_config = SettingsConfigDict(env_file='.env', extra='allow')
+
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def parse_debug(cls, v: Any) -> bool:
+        if isinstance(v, str):
+            return v.lower() in ("true", "1", "yes", "debug", "dev")
+        return bool(v)
 
 @lru_cache
 def get_settings():
