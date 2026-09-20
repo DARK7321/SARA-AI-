@@ -56,7 +56,7 @@ async def test_google_auth_url_and_callback(test_client, db_session):
     conn_result = await db_session.execute(
         select(Connection).where(
             Connection.provider == "google",
-            Connection.account_email == "owner@gmail.com",
+            Connection.account_email.in_(["owner@gmail.com", "vikas635026@gmail.com"]),
         )
     )
     conn = conn_result.scalars().first()

@@ -34,12 +34,12 @@ async def main():
         print("Tables created successfully!")
 
     async with async_session_maker() as session:
-        result = await session.execute(select(User).where(User.email == "admin@omnibrain.local"))
+        result = await session.execute(select(User).where(User.email == "vikas635026@gmail.com"))
         user = result.scalar_one_or_none()
         if not user:
-            print("Seeding owner user admin@omnibrain.local...")
+            print("Seeding owner user vikas635026@gmail.com...")
             owner = User(
-                email="admin@omnibrain.local",
+                email="vikas635026@gmail.com",
                 name="Vikas (Owner)",
                 role="owner",
                 password_hash=get_password_hash("OmniBrain@2026"),
@@ -48,7 +48,7 @@ async def main():
             )
             session.add(owner)
             await session.commit()
-            print("Owner user admin@omnibrain.local created successfully!")
+            print("Owner user vikas635026@gmail.com created successfully!")
         else:
             print("Owner user already exists!")
 
@@ -59,3 +59,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+

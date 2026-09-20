@@ -23,6 +23,7 @@ router = APIRouter()
 class CallbackPayload(BaseModel):
     code: str
     state: Optional[str] = None
+    redirect_uri: Optional[str] = None
 
 
 @router.get("", response_model=APIResponse)
@@ -77,7 +78,9 @@ async def get_google_auth_url(
     base_url = str(request.base_url).rstrip("/")
     if "onrender.com" in base_url and base_url.startswith("http://"):
         base_url = base_url.replace("http://", "https://", 1)
-    callback_url = f"{base_url}/v1/connectors/google/callback"
+    
+    custom_redirect = request.query_params.get("redirect_uri")
+    callback_url = custom_redirect or f"{base_url}/v1/connectors/google/callback"
 
     auth_mgr = GoogleAuthManager(redirect_uri=callback_url)
     state = f"user_{current_user.id}_{uuid4().hex[:8]}"
@@ -85,7 +88,7 @@ async def get_google_auth_url(
 
     return APIResponse(
         ok=True,
-        data={"auth_url": auth_url, "state": state},
+        data={"auth_url": auth_url, "state": state, "redirect_uri": callback_url},
         trace_id=getattr(request.state, "trace_id", None),
     )
 
@@ -100,6 +103,7 @@ async def google_oauth_callback(
     query_params = dict(request.query_params)
     code = query_params.get("code") or (payload.code if payload else None)
     state = query_params.get("state") or (payload.state if payload else None)
+    redirect_uri = query_params.get("redirect_uri") or (payload.redirect_uri if payload else None)
 
     if not code or not state:
         raise HTTPException(status_code=400, detail="Missing OAuth code or state")
@@ -110,12 +114,13 @@ async def google_oauth_callback(
     except (IndexError, ValueError):
         raise HTTPException(status_code=400, detail="Invalid state parameter")
 
-    base_url = str(request.base_url).rstrip("/")
-    if "onrender.com" in base_url and base_url.startswith("http://"):
-        base_url = base_url.replace("http://", "https://", 1)
-    callback_url = f"{base_url}/v1/connectors/google/callback"
+    if not redirect_uri:
+        base_url = str(request.base_url).rstrip("/")
+        if "onrender.com" in base_url and base_url.startswith("http://"):
+            base_url = base_url.replace("http://", "https://", 1)
+        redirect_uri = f"{base_url}/v1/connectors/google/callback"
 
-    auth_mgr = GoogleAuthManager(redirect_uri=callback_url)
+    auth_mgr = GoogleAuthManager(redirect_uri=redirect_uri)
     tokens = await auth_mgr.exchange_code(code)
 
     now = datetime.now(timezone.utc)

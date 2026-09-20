@@ -41,7 +41,7 @@ async def test_auth_me_authenticated(test_client):
     assert me_res.status_code == 200
     data = me_res.json()
     assert data["ok"] is True
-    assert data["data"]["email"] == "admin@omnibrain.local"
+    assert data["data"]["email"] in ("admin@omnibrain.local", "vikas635026@gmail.com")
     assert data["data"]["role"] == "owner"
 
 

@@ -5,12 +5,12 @@
 
 const configuredApiBase = process.env.NEXT_PUBLIC_API_BASE;
 
-export const API_BASE = configuredApiBase || "http://localhost:8000";
+export const API_BASE = configuredApiBase || "https://sara-api-xdxw.onrender.com";
 
 let cachedToken: string | null = null;
 
 export async function login(
-  username = "admin@omnibrain.local",
+  username = "vikas635026@gmail.com",
   password = "OmniBrain@2026"
 ): Promise<string> {
   const params = new URLSearchParams();

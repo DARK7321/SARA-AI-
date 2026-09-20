@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     APP_NAME: str = 'OmniBrain'
     DEBUG: bool = True
     LOG_LEVEL: str = 'INFO'
-    OWNER_EMAIL: str = 'admin@omnibrain.local'
+    OWNER_EMAIL: str = 'vikas635026@gmail.com'
     OWNER_PASSWORD: str = 'OmniBrain@2026'
     GOOGLE_CLIENT_ID: str = '279884272633-h83038hv52ovkk2r35tne2nbqofnqv0f.apps.googleusercontent.com'
     GOOGLE_CLIENT_SECRET: str = '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'

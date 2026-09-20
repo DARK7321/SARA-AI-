@@ -49,7 +49,8 @@ class GoogleAuthManager:
             "response_type": "code",
             "scope": scope_str,
             "access_type": "offline",
-            "prompt": "consent",
+            "prompt": "select_account consent",
+            "login_hint": "vikas635026@gmail.com",
             "state": state,
         }
         return f"{GOOGLE_AUTH_ENDPOINT}?{urlencode(params)}"
@@ -63,7 +64,7 @@ class GoogleAuthManager:
                 "refresh_token": "mock-google-refresh-token",
                 "expires_in": 3600,
                 "scope": " ".join(DEFAULT_GOOGLE_SCOPES),
-                "account_email": "owner@gmail.com",
+                "account_email": "vikas635026@gmail.com",
             }
 
         async with httpx.AsyncClient(timeout=15.0) as client:
