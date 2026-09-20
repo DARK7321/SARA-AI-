@@ -38,11 +38,17 @@ class GmailSandbox:
         self.sent: Dict[str, Dict[str, Any]] = {}
 
     def read(self, message_id: str) -> Dict[str, Any]:
+        if not message_id:
+            if self.messages:
+                return next(iter(self.messages.values()))
+            return {"status": "no_messages", "subject": "No recent email", "body": "Inbox is empty."}
         if message_id in self.messages:
             return self.messages[message_id]
         if message_id in self.sent:
             return self.sent[message_id]
-        raise ValueError(f"Message {message_id} not found")
+        if self.messages:
+            return next(iter(self.messages.values()))
+        return {"status": "not_found", "message": f"Message {message_id} not found"}
 
     def search(self, query: str = "", max_results: int = 10) -> List[Dict[str, Any]]:
         results = []
@@ -119,21 +125,61 @@ class GmailActions:
         try:
             async with httpx.AsyncClient(timeout=20.0) as client:
                 if action == "gmail.read":
-                    msg_id = strip_untrusted_wrapper(inputs["message_id"])
+                    msg_id = strip_untrusted_wrapper(inputs.get("message_id", ""))
+                    if not msg_id:
+                        s_resp = await client.get(f"{GMAIL_API_BASE}/messages", headers=headers, params={"maxResults": 1})
+                        if s_resp.status_code == 200:
+                            s_data = s_resp.json()
+                            if s_data.get("messages"):
+                                msg_id = s_data["messages"][0]["id"]
+                    if not msg_id:
+                        return {"status": "no_messages", "subject": "No emails found", "body": "Your inbox has no messages."}
                     resp = await client.get(f"{GMAIL_API_BASE}/messages/{msg_id}", headers=headers)
                     resp.raise_for_status()
-                    return resp.json()
+                    msg_json = resp.json()
+                    hdrs = {h["name"].lower(): h["value"] for h in msg_json.get("payload", {}).get("headers", [])}
+                    return {
+                        "id": msg_json.get("id"),
+                        "subject": hdrs.get("subject", "No Subject"),
+                        "from": hdrs.get("from", "Unknown Sender"),
+                        "date": hdrs.get("date", ""),
+                        "snippet": msg_json.get("snippet", ""),
+                        "body": msg_json.get("snippet", ""),
+                    }
 
                 elif action == "gmail.search":
                     query = inputs.get("query", "")
-                    max_results = inputs.get("max_results", 10)
+                    max_results = inputs.get("max_results", 5)
+                    params = {"maxResults": max_results}
+                    if query:
+                        params["q"] = query
                     resp = await client.get(
                         f"{GMAIL_API_BASE}/messages",
                         headers=headers,
-                        params={"q": query, "maxResults": max_results},
+                        params=params,
                     )
                     resp.raise_for_status()
-                    return resp.json()
+                    data = resp.json()
+                    raw_msgs = data.get("messages", [])
+                    enriched = []
+                    for m in raw_msgs[:3]:
+                        try:
+                            mr = await client.get(f"{GMAIL_API_BASE}/messages/{m['id']}", headers=headers)
+                            if mr.status_code == 200:
+                                md = mr.json()
+                                hdrs = {h["name"].lower(): h["value"] for h in md.get("payload", {}).get("headers", [])}
+                                enriched.append({
+                                    "id": m["id"],
+                                    "threadId": m.get("threadId"),
+                                    "subject": hdrs.get("subject", "No Subject"),
+                                    "from": hdrs.get("from", "Unknown"),
+                                    "date": hdrs.get("date", ""),
+                                    "snippet": md.get("snippet", ""),
+                                })
+                        except Exception:
+                            enriched.append(m)
+                    data["messages"] = enriched
+                    return data
 
                 elif action == "gmail.draft":
                     message = MIMEText(inputs["body"])

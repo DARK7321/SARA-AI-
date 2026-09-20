@@ -74,7 +74,18 @@ class DAGPlanner:
 
             step_inputs = dict(inputs)
             if cap == "gmail.search":
-                step_inputs.setdefault("query", classification.entities.get("query", classification.goal))
+                q = classification.entities.get("query", "")
+                if not q:
+                    raw_goal = (classification.goal or "").lower()
+                    conversational_words = {
+                        "check", "read", "email", "gmail", "mail", "last", "lasrt", "latest", "inbox",
+                        "karo", "meri", "mera", "mujhe", "muje", "dekho", "batao", "konsi", "kon",
+                        "aai", "thi", "hai", "kya", "shuru", "please", "can", "you"
+                    }
+                    meaningful = [w for w in raw_goal.split() if w not in conversational_words]
+                    q = " ".join(meaningful) if len(meaningful) >= 2 else ""
+                step_inputs["query"] = q
+                step_inputs.setdefault("max_results", 5)
             elif cap == "calendar.list_events":
                 step_inputs.setdefault("max_results", 5)
             elif cap == "sheets.read_rows":

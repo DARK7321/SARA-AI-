@@ -85,10 +85,29 @@ async def execute_task_job(
 
         execution_engine = StepExecutionEngine()
         fake_connector = FakeConnector()
-        gmail_connector = GmailConnector()
-        gdrive_connector = GDriveConnector()
-        gcal_connector = GCalConnector()
-        gsheets_connector = GSheetsConnector()
+
+        # Resolve user Google OAuth token if connected
+        google_token = None
+        try:
+            from packages.connectors.google_auth import GoogleAuthManager
+            conn_res = await s.execute(
+                select(Connection).where(
+                    Connection.user_id == task.user_id,
+                    Connection.provider == "google",
+                    Connection.status == "ONLINE",
+                )
+            )
+            google_conn = conn_res.scalar_one_or_none()
+            if google_conn and google_conn.access_token_encrypted:
+                auth_mgr = GoogleAuthManager()
+                google_token = await auth_mgr.get_valid_access_token(google_conn, s)
+        except Exception as ex:
+            logger.warning(f"Could not load Google token for task {task_id}: {ex}")
+
+        gmail_connector = GmailConnector(access_token=google_token)
+        gdrive_connector = GDriveConnector(access_token=google_token)
+        gcal_connector = GCalConnector(access_token=google_token)
+        gsheets_connector = GSheetsConnector(access_token=google_token)
         github_connector = GitHubConnector()
         slack_connector = SlackConnector()
         browser_connector = BrowserConnector()
@@ -98,6 +117,7 @@ async def execute_task_job(
 
         task_failed = False
         waiting_approval = False
+        previous_step_outputs = {}
 
         for step in steps:
             if step.status in ("SUCCEEDED", "SKIPPED"):
@@ -144,6 +164,17 @@ async def execute_task_job(
             elif cap.startswith("web."):
                 connector = websearch_connector
 
+            # Dynamic Input Propagation across dependent steps
+            step_inputs = dict(step.inputs or {})
+            if cap == "gmail.read" and not step_inputs.get("message_id"):
+                for prev_out in previous_step_outputs.values():
+                    if isinstance(prev_out, dict):
+                        msgs = prev_out.get("messages") or prev_out.get("data", {}).get("messages")
+                        if msgs and isinstance(msgs, list) and len(msgs) > 0:
+                            first_msg = msgs[0]
+                            step_inputs["message_id"] = first_msg.get("id") if isinstance(first_msg, dict) else str(first_msg)
+                            break
+
             # Execute step
             side_effect = SideEffectType.WRITE
             if step.kind == "tool" and ("read" in cap or "search" in cap or "list" in cap):
@@ -156,11 +187,14 @@ async def execute_task_job(
                 step=step,
                 connector=connector,
                 action=cap or "fake.action",
-                inputs=step.inputs,
+                inputs=step_inputs,
                 user_id=task.user_id,
                 side_effect=side_effect,
                 autonomy_level=autonomy_level,
             )
+
+            if result.success and result.data:
+                previous_step_outputs[step.step_key] = result.data
 
             if result.status == "WAITING_APPROVAL":
                 waiting_approval = True
