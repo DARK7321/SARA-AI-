@@ -152,10 +152,11 @@ class IntentEngine:
             "search inbox", "check mail", "read mail", "check calendar", "bhejo", "banao",
             "likho", "karo", "hatao", "dhundo", "open", "type", "write", "run", "minimize", "close", "band", "start"
         ]
-        has_action_intent = bool(req_caps) or any(w in lower_msg for w in action_intent_words)
+        question_words = ["?", "kya", "kaise", "kyun", "kyu", "kaisa", "kaisi", "who", "what", "why", "how", "explain", "batao", "samjhao", "tell me", "define", "meaning", "fayde", "nuksan", "think"]
+        is_question = any(qw in lower_msg for qw in question_words)
         
-        # Any question or statement without explicit action verbs is conversational
-        is_conversational = (not has_action_intent) and is_chat
+        # Any question or statement without explicit action verbs is conversational (deep thinking)
+        is_conversational = (not req_caps) and (is_chat or is_question or (not has_action_intent))
 
         return TaskClassification(
             is_conversational=is_conversational,
