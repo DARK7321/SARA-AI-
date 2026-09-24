@@ -26,9 +26,16 @@ class WebSearchConnector(BaseConnector):
         start_time = time.time()
         try:
             if request.action == "web.search":
-                query = request.input.get("query")
-                max_results = request.input.get("max_results", 3)
-                results = self._search(query, max_results)
+                raw_inputs = request.input or {}
+                query = (
+                    raw_inputs.get("query")
+                    or raw_inputs.get("raw_command")
+                    or raw_inputs.get("goal")
+                    or raw_inputs.get("message")
+                    or "latest news headlines"
+                )
+                max_results = raw_inputs.get("max_results", 4)
+                results = self._search(str(query).strip(), max_results)
                 from packages.core.security.injection import wrap_dict
                 results = wrap_dict("websearch", results)
                 latency_ms = int((time.time() - start_time) * 1000)
@@ -49,8 +56,9 @@ class WebSearchConnector(BaseConnector):
             )
 
     def _search(self, query: str, max_results: int = 4) -> List[Dict[str, str]]:
-        if not query:
-            raise ValueError("Query is required for web search.")
+        clean_q = (query or "").strip()
+        if not clean_q:
+            clean_q = "latest news headlines"
 
         logger.info(f"Executing multi-source web search for: '{query}'")
         results = []

@@ -52,7 +52,15 @@ class ResultSynthesizer:
             if status == "SUCCEEDED":
                 what_done.append(f"Executed {cap} successfully.")
                 outputs = step.get("outputs", {})
-                if "messages" in outputs:
+                if "results" in outputs and isinstance(outputs["results"], list):
+                    web_results = outputs["results"]
+                    results.append(f"Found {len(web_results)} live web search result(s).")
+                    for r in web_results[:3]:
+                        t = r.get("title", "")
+                        s = r.get("snippet", "")
+                        if t:
+                            results.append(f"• {t}: {s[:120]}")
+                elif "messages" in outputs:
                     count = len(outputs["messages"])
                     results.append(f"Found {count} message(s) in Gmail.")
                 elif "files" in outputs:
@@ -80,20 +88,34 @@ class ResultSynthesizer:
 
         # Check if task_goal contains Hindi or Hinglish
         is_hindi = any("\u0900" <= char <= "\u097F" for char in task_goal) or any(
-            w in task_goal.lower().split() for w in ["karo", "kaho", "mera", "meri", "kya", "kaise", "bhejo", "batao"]
+            w in task_goal.lower().split() for w in ["karo", "kaho", "mera", "meri", "kya", "kaise", "bhejo", "batao", "aaj"]
         )
+
+        # Check if any step had web search results to summarize in voice
+        top_headline = None
+        for step in steps_data:
+            outs = step.get("outputs", {})
+            if isinstance(outs, dict) and "results" in outs and isinstance(outs["results"], list) and outs["results"]:
+                top_headline = outs["results"][0].get("title")
+                break
 
         # Spoken summary for Lady Voice Assistant
         if is_hindi:
             if task_status == "COMPLETED":
-                spoken = "मैंने आपका काम पूरा कर दिया है। सभी स्टेप्स वेरिफाई हो चुके हैं।"
+                if top_headline:
+                    spoken = f"हाँ जी, मुझे ताज़ा अपडेट्स मिल गए हैं: {top_headline}।"
+                else:
+                    spoken = "मैंने आपका काम पूरा कर दिया है। सभी स्टेप्स वेरिफाई हो चुके हैं।"
             elif task_status == "WAITING_APPROVAL":
                 spoken = "मैंने टास्क तैयार कर लिया है, लेकिन आगे बढ़ने के लिए आपकी अनुमति चाहिए।"
             else:
                 spoken = "टास्क प्रोसेस करने में कोई समस्या आई है। कृपया डिटेल्स चेक करें।"
         else:
             if task_status == "COMPLETED":
-                spoken = f"I've completed your task to {task_goal.lower()}. All steps executed and verified."
+                if top_headline:
+                    spoken = f"Here is the latest update: {top_headline}."
+                else:
+                    spoken = f"I've completed your task to {task_goal.lower()}. All steps executed and verified."
             elif task_status == "WAITING_APPROVAL":
                 spoken = "I've prepared the task, but need your confirmation before proceeding with the sensitive action."
             else:

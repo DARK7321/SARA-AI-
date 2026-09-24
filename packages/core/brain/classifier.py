@@ -34,22 +34,25 @@ class TaskClassification(BaseModel):
 
 CLASSIFIER_SYSTEM_PROMPT = """You are the Intent and Task Classifier for OmniBrain, an AI Operating System.
 Analyze user messages and classify them into:
-1. is_conversational: True if the user is saying hello, asking who you are, or seeking advice/information without needing external tools. False if they want you to perform an action (read email, schedule event, update sheet, delete file, etc.).
+1. is_conversational: True if the user is saying hello, asking who you are, asking questions, seeking news, facts, research, advice, or explanations (e.g. "aaj ki latest news batao", "what is quantum computing", "how are you"). SARA handles questions and news with real-time research directly in conversation.
+ONLY set is_conversational=False when the user wants to execute a concrete action or change something on tools/host (e.g. send email, book meeting, edit spreadsheet, open an app, control mouse/keyboard).
 2. path:
-- FAST: simple information lookup or 1 read tool (latency <1s).
+   - FAST: simple questions, information lookup, or single read action (latency <1s).
    - SMART: 2-4 coordinated tool steps (e.g. read email, summarize, save to drive or sheet).
    - DEEP: complex multi-stage tasks requiring subagents and extensive reasoning.
 3. required_capabilities: choose from [gmail.read, gmail.search, gmail.draft, gmail.send, drive.list, drive.read, drive.create, drive.share, calendar.list_events, calendar.create_event, sheets.read_rows, sheets.append_rows, sheets.update_cell, web.search, host.open_app, host.mouse_control, host.keyboard_control, host.file_op, host.run_script, host.read_screen].
-4. estimated_risk: LOW for reading, MEDIUM for creating drafts/typing, HIGH for sending emails, running scripts, or deleting items.
+4. estimated_risk: LOW for reading/searching, MEDIUM for creating drafts/typing, HIGH for sending emails, running scripts, or deleting items.
 
 CRITICAL EXAMPLES:
+- "HEY SARA MUJE AAJ KI LATEST NEWS BATAO" -> is_conversational=True, path="FAST", goal="Get today's latest news", required_capabilities=[]
+- "aaj ki breaking news kya hai" -> is_conversational=True, path="FAST", goal="Get breaking news", required_capabilities=[]
+- "ISRO ka mission kya hai" -> is_conversational=True, path="FAST", goal="Explain ISRO upcoming missions", required_capabilities=[]
+- "Google par search karke batao" -> is_conversational=True, path="FAST", goal="Search internet for user question", required_capabilities=[]
 - "minimize all windows" -> is_conversational=False, required_capabilities=["host.keyboard_control"], entities={"action": "hotkey", "keys": ["win", "m"]}
 - "close window" -> is_conversational=False, required_capabilities=["host.keyboard_control"], entities={"action": "hotkey", "keys": ["alt", "f4"]}
-- "click on X" -> is_conversational=False, required_capabilities=["host.read_screen", "host.mouse_control"]
+- "open calculator" -> is_conversational=False, required_capabilities=["host.open_app"], entities={"app": "calc"}
 - "open notepad" -> is_conversational=False, required_capabilities=["host.open_app"], entities={"app": "notepad"}
-- "open chrome" -> is_conversational=False, required_capabilities=["host.open_app"], entities={"app": "chrome"}
 - "type in notepad: Hello" -> is_conversational=False, path="SMART", required_capabilities=["host.open_app", "host.type_text"], entities={"app": "notepad", "text": "Hello"}
-- "notepad kholke Hello likho" -> is_conversational=False, path="SMART", required_capabilities=["host.open_app", "host.type_text"], entities={"app": "notepad", "text": "Hello"}
 """
 
 
@@ -152,7 +155,12 @@ class IntentEngine:
             "search inbox", "check mail", "read mail", "check calendar", "bhejo", "banao",
             "likho", "karo", "hatao", "dhundo", "open", "type", "write", "run", "minimize", "close", "band", "start"
         ]
-        question_words = ["?", "kya", "kaise", "kyun", "kyu", "kaisa", "kaisi", "who", "what", "why", "how", "explain", "batao", "samjhao", "tell me", "define", "meaning", "fayde", "nuksan", "think"]
+        question_words = [
+            "?", "kya", "kaise", "kyun", "kyu", "kaisa", "kaisi", "who", "what",
+            "why", "how", "explain", "batao", "samjhao", "tell me", "define",
+            "meaning", "fayde", "nuksan", "think", "news", "khabar", "taaza",
+            "latest", "update", "research"
+        ]
         is_question = any(qw in lower_msg for qw in question_words)
         
         # Any question or statement without explicit action verbs is conversational (deep thinking)

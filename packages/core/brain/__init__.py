@@ -3,11 +3,13 @@ from .web_research import is_research_query, search_web_realtime, format_researc
 
 try:
     from .context import ContextEngine, SystemContext
-    from .classifier import IntentEngine, TaskClassification
-    from .planner import DAGPlanner, DAGPlan, StepPlan
-    from .synthesizer import ResultSynthesizer, StructuredReport
 except Exception:
-    pass
+    ContextEngine = None
+    SystemContext = None
+
+from .classifier import IntentEngine, TaskClassification
+from .planner import DAGPlanner, DAGPlan, StepPlan
+from .synthesizer import ResultSynthesizer, StructuredReport
 
 __all__ = [
     "ContextEngine",

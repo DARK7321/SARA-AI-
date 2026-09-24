@@ -86,6 +86,21 @@ class DAGPlanner:
                     q = " ".join(meaningful) if len(meaningful) >= 2 else ""
                 step_inputs["query"] = q
                 step_inputs.setdefault("max_results", 5)
+            elif cap == "web.search":
+                q = classification.entities.get("query", "")
+                if not q:
+                    raw_cmd = (inputs.get("raw_command") or "").strip()
+                    raw_goal = (classification.goal or "").strip()
+                    target = raw_cmd or raw_goal
+                    conversational_words = {
+                        "hey", "hi", "sara", "s.a.r.a.", "muje", "mujhe", "batao", "bataiye",
+                        "kya", "hai", "please", "can", "you", "tell", "me", "karo", "do",
+                        "search", "dhundo", "khojo"
+                    }
+                    meaningful = [w for w in target.split() if w.lower() not in conversational_words]
+                    q = " ".join(meaningful) if meaningful else target
+                step_inputs["query"] = q or "latest news headlines"
+                step_inputs.setdefault("max_results", 4)
             elif cap == "calendar.list_events":
                 step_inputs.setdefault("max_results", 5)
             elif cap == "sheets.read_rows":
