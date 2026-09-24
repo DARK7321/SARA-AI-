@@ -98,9 +98,9 @@ class DAGPlanner:
                 app = classification.entities.get("app")
                 if not app:
                     goal_lower = classification.goal.lower()
-                    for known in ["notepad", "chrome", "excel", "word"]:
+                    for known in ["calculator", "calc", "notepad", "chrome", "edge", "paint", "explorer", "excel", "word"]:
                         if known in goal_lower:
-                            app = known
+                            app = "calc" if known in ("calculator", "calc") else known
                             break
                 step_inputs["app"] = app or "notepad"
             elif cap == "host.mouse_control":
@@ -145,4 +145,6 @@ class DAGPlanner:
             goal=classification.goal,
             steps=steps,
         )
+
+
 

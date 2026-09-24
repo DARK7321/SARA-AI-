@@ -31,8 +31,12 @@ async def login(
         if target_email in ("vikas635026@gmail.com", "admin@omnibrain.local")
         else (User.email == target_email)
     )
-    result = await db.execute(select(User).where(condition))
-    user = result.scalar_one_or_none()
+    result = await db.execute(
+        select(User)
+        .where(condition)
+        .order_by((User.email == target_email).desc())
+    )
+    user = result.scalars().first()
 
     if not user or not user.password_hash or not verify_password(form_data.password, user.password_hash):
         raise HTTPException(

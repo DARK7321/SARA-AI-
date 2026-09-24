@@ -32,9 +32,10 @@ class GoogleAuthManager:
         redirect_uri: str = "http://localhost:8000/v1/connectors/google/callback",
     ):
         settings = get_settings()
-        self.client_id = client_id or getattr(settings, "GOOGLE_CLIENT_ID", "mock-google-client-id")
-        self.client_secret = client_secret or getattr(settings, "GOOGLE_CLIENT_SECRET", "mock-google-secret")
+        self.client_id = client_id or getattr(settings, "GOOGLE_CLIENT_ID", "") or "mock-google-client-id"
+        self.client_secret = client_secret or getattr(settings, "GOOGLE_CLIENT_SECRET", "") or "mock-google-secret"
         self.redirect_uri = redirect_uri
+        self.owner_email = getattr(settings, "OWNER_EMAIL", "") or "you@example.com"
 
     def get_authorization_url(
         self,
@@ -50,7 +51,7 @@ class GoogleAuthManager:
             "scope": scope_str,
             "access_type": "offline",
             "prompt": "select_account consent",
-            "login_hint": "vikas635026@gmail.com",
+            "login_hint": self.owner_email,
             "state": state,
         }
         return f"{GOOGLE_AUTH_ENDPOINT}?{urlencode(params)}"
@@ -64,7 +65,7 @@ class GoogleAuthManager:
                 "refresh_token": "mock-google-refresh-token",
                 "expires_in": 3600,
                 "scope": " ".join(DEFAULT_GOOGLE_SCOPES),
-                "account_email": "vikas635026@gmail.com",
+                "account_email": self.owner_email,
             }
 
         async with httpx.AsyncClient(timeout=15.0) as client:

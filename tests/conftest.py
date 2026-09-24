@@ -14,7 +14,14 @@ from apps.api.settings import get_settings
 async def db_session():
     """Provide a fresh database session per test using NullPool."""
     settings = get_settings()
-    test_engine = create_async_engine(settings.DATABASE_URL, poolclass=NullPool)
+    test_engine = create_async_engine(
+        settings.DATABASE_URL,
+        poolclass=NullPool,
+        connect_args={
+            "statement_cache_size": 0,
+            "prepared_statement_cache_size": 0,
+        },
+    )
     test_session_maker = async_sessionmaker(
         test_engine, class_=AsyncSession, expire_on_commit=False
     )

@@ -5,7 +5,16 @@
 
 const configuredApiBase = process.env.NEXT_PUBLIC_API_BASE;
 
-export const API_BASE = configuredApiBase || "https://sara-api-xdxw.onrender.com";
+const localApiBase =
+  typeof window !== "undefined" &&
+  (window.location.protocol === "file:" ||
+    window.location.hostname === "" ||
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1")
+    ? "http://127.0.0.1:8000"
+    : "https://sara-api-xdxw.onrender.com";
+
+export const API_BASE = configuredApiBase || localApiBase;
 
 let cachedToken: string | null = null;
 
@@ -235,11 +244,32 @@ export async function respondApproval(approvalId: string, decision: "approved" |
 }
 
 export async function fetchConnectors(): Promise<any[]> {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/v1/connectors`, { headers });
-  if (!res.ok) return [];
-  const json = await res.json();
-  return json.data.connectors || [];
+  try {
+    let headers = await getAuthHeaders();
+    let res = await fetch(`${API_BASE}/v1/connectors`, { headers });
+    if (res.status === 401) {
+      logout();
+      headers = await getAuthHeaders();
+      res = await fetch(`${API_BASE}/v1/connectors`, { headers });
+    }
+    if (res.ok) {
+      const json = await res.json();
+      return json.data?.connectors || [];
+    }
+  } catch (err) {
+    console.warn("fetchConnectors failed on API_BASE, attempting local fallback:", err);
+  }
+
+  // Graceful fallback to local SARA engine if running on desktop
+  try {
+    const localRes = await fetch("http://127.0.0.1:8000/v1/connectors");
+    if (localRes.ok) {
+      const json = await localRes.json();
+      return json.data?.connectors || [];
+    }
+  } catch {}
+
+  return [];
 }
 
 export async function fetchHealthCenter(): Promise<any> {
@@ -703,8 +733,6 @@ export async function activateClonedVoice(): Promise<boolean> {
   });
   return res.ok;
 }
-
-
 
 
 
