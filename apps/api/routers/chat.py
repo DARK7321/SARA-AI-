@@ -26,6 +26,7 @@ from packages.core.voice.tts import VoiceEngine, DEFAULT_LADY_VOICE, DEFAULT_HIN
 from packages.core.router.model_router import ModelRouter
 from packages.core.agents.frameworks import get_framework_adapter
 from packages.core.memory.store import get_memory_store
+from packages.core.brain.web_research import is_research_query, search_web_realtime, format_research_context
 from apps.api.deps import get_db, get_current_user
 from apps.worker.main import execute_task_job
 from apps.api.shared import (
@@ -310,18 +311,31 @@ async def chat_with_brain(
                 else "I can send emails, schedule your meetings, and manage your documents. Do you have a specific task in mind?"
             )
 
-        # Redis Cache Check — instant response for repeated custom questions
-        if not reply_text:
+        # Redis Cache Check — instant response for repeated custom questions (skip for live research queries)
+        is_research = is_research_query(payload.message)
+        if not reply_text and not is_research:
             cached = await get_cached_reply(payload.message)
             if cached:
                 reply_text = cached
 
-        # Dynamic LLM Generation for novel custom questions
+        # Dynamic LLM Generation for novel custom questions (with Real-Time Internet Research Grounding)
         if not reply_text:
             router_engine = get_model_router()
             memory_context = await _recent_memory_prompt(db, current_user.id)
+
+            # Real-Time Internet Research & Grounding
+            research_context = ""
+            if is_research:
+                try:
+                    live_results = search_web_realtime(payload.message, max_results=3)
+                    if live_results:
+                        research_context = format_research_context(live_results)
+                except Exception as rx:
+                    pass
+
             convo_prompt = (
                 f"{memory_context}"
+                f"{research_context}"
                 f"User says: \"{payload.message}\"\n\n"
                 f"Your crisp professional response:"
             )
@@ -334,8 +348,9 @@ async def chat_with_brain(
             )
             reply_text = model_res.content or "Hello! I am ready to assist you with your tasks, emails, calendar, and documents."
 
-            # Cache the LLM response for future instant replies
-            await set_cached_reply(payload.message, reply_text)
+            # Cache the LLM response for future instant replies (skip research queries)
+            if not is_research:
+                await set_cached_reply(payload.message, reply_text)
 
         # High-Speed Voice Synthesis: synthesize first punchy sentence for instant audio (<300ms)
         audio_data = None
@@ -356,7 +371,11 @@ async def chat_with_brain(
             trace_id=trace_id,
         )
 
-    # 3. Path B: Actionable Command — Plan and execute DAG
+    # 3. Path B: Actionable Command — parallel context assembly
+    system_ctx = await get_context_engine().assemble_context(db, current_user.id, query=payload.message)
+    ctx_snippet = system_ctx.to_system_prompt_snippet()
+
+    # 4. Plan and execute DAG
     dag_plan = get_dag_planner().plan(classification, initial_inputs={"raw_command": payload.message})
 
     # Create Task in database
@@ -509,8 +528,9 @@ async def chat_stream(
                     await asyncio.sleep(0.02)  # 20ms between words for natural feel
                 full_text = cached_reply
             else:
-                # Redis cache check for repeated custom queries
-                redis_cached = await get_cached_reply(payload.message)
+                is_research = is_research_query(payload.message)
+                # Redis cache check for repeated custom queries (skip for live research queries)
+                redis_cached = None if is_research else await get_cached_reply(payload.message)
                 if redis_cached:
                     words = redis_cached.split(" ")
                     for i, word in enumerate(words):
@@ -519,10 +539,22 @@ async def chat_stream(
                         await asyncio.sleep(0.02)
                     full_text = redis_cached
                 else:
+                    # Fetch real-time web context if query requires research/current data
+                    research_context = ""
+                    if is_research:
+                        yield _sse_event("status", "🌐 Searching real-time internet data...")
+                        try:
+                            live_results = search_web_realtime(payload.message, max_results=3)
+                            if live_results:
+                                research_context = format_research_context(live_results)
+                        except Exception:
+                            pass
+
                     # Stream LLM response token-by-token from Gemini
                     memory_context = await _recent_memory_prompt(db, current_user.id)
                     convo_prompt = (
                         f"{memory_context}"
+                        f"{research_context}"
                         f"User says: \"{payload.message}\"\n\n"
                         f"Your crisp professional response:"
                     )
@@ -542,8 +574,9 @@ async def chat_stream(
                             full_text = "Hello! I am Sara, ready to assist you."
                             yield _sse_event("token", full_text)
 
-                    # Cache for future instant replies
-                    await set_cached_reply(payload.message, full_text)
+                    # Cache for future instant replies (skip ephemeral research queries)
+                    if not is_research:
+                        await set_cached_reply(payload.message, full_text)
 
             # Audio synthesis (after text is complete)
             if payload.include_audio:
@@ -560,6 +593,8 @@ async def chat_stream(
         else:
             # 2B. Actionable Command Path — stream progress events
             yield _sse_event("status", "planning task...")
+
+            system_ctx = await get_context_engine().assemble_context(db, current_user.id, query=payload.message)
 
             dag_plan = get_dag_planner().plan(classification, initial_inputs={"raw_command": payload.message})
 
