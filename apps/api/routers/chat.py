@@ -356,11 +356,7 @@ async def chat_with_brain(
             trace_id=trace_id,
         )
 
-    # 3. Path B: Actionable Command — parallel context assembly
-    system_ctx = await get_context_engine().assemble_context(db, current_user.id, query=payload.message)
-    ctx_snippet = system_ctx.to_system_prompt_snippet()
-
-    # 4. Plan and execute DAG
+    # 3. Path B: Actionable Command — Plan and execute DAG
     dag_plan = get_dag_planner().plan(classification, initial_inputs={"raw_command": payload.message})
 
     # Create Task in database
@@ -564,8 +560,6 @@ async def chat_stream(
         else:
             # 2B. Actionable Command Path — stream progress events
             yield _sse_event("status", "planning task...")
-
-            system_ctx = await get_context_engine().assemble_context(db, current_user.id, query=payload.message)
 
             dag_plan = get_dag_planner().plan(classification, initial_inputs={"raw_command": payload.message})
 
