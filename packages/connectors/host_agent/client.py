@@ -69,76 +69,72 @@ class HostAgentConnector(BaseConnector):
             "action": action_payload
         }
 
+        # Check if local host agent is directly reachable or if we should use Supabase bridge
         try:
-            async with httpx.AsyncClient(timeout=2.5) as client:
+            async with httpx.AsyncClient(timeout=0.6) as client:
                 res = await client.post(
                     f"{self.url}/actions",
                     json=req_payload,
                     headers={"Authorization": f"Bearer {self._token()}"}
                 )
-                res.raise_for_status()
-                data = res.json()
-                
-                latency = int((time.time() - start_time) * 1000)
-                if data.get("success"):
-                    result_data = data.get("data", {})
-                    if request.action in ["host.read_screen", "host.file_op:read", "host.file_op:list"]:
-                        from packages.core.security.injection import wrap_dict
-                        result_data = wrap_dict("host", result_data)
+                if res.status_code == 200:
+                    data = res.json()
+                    if data.get("success"):
+                        result_data = data.get("data", {})
+                        if request.action in ["host.read_screen", "host.file_op:read", "host.file_op:list"]:
+                            from packages.core.security.injection import wrap_dict
+                            result_data = wrap_dict("host", result_data)
 
-                    return ToolResponse(
-                        success=True,
-                        data=result_data,
-                        metadata=ToolMetadata(latency_ms=latency),
-                        verification_hints={"check": "host_action_acknowledged"},
-                    )
-                else:
-                    err = data.get("error", {})
-                    err_cls = ErrorClass.POLICY_DENIED if err.get("class") == "POLICY_DENIED" else ErrorClass.TOOL_UNAVAILABLE
-                    return ToolResponse(
-                        success=False,
-                        error=ToolError(error_class=err_cls, message=err.get("message", "Unknown error")),
-                        metadata=ToolMetadata(latency_ms=latency)
-                    )
-        except Exception as e:
-            # Direct HTTP to host agent failed (typical when backend runs in cloud Render).
-            # Fall back to waiting for local desktop bridge via Supabase database!
-            try:
-                import asyncio
-                from packages.core.db.session import async_session_maker
-                from packages.core.db.models import TaskStep
-                from sqlalchemy import select
+                        latency = int((time.time() - start_time) * 1000)
+                        return ToolResponse(
+                            success=True,
+                            data=result_data,
+                            metadata=ToolMetadata(latency_ms=latency),
+                            verification_hints={"check": "host_action_acknowledged"},
+                        )
+        except Exception:
+            pass
 
-                step_id = request.context.step_id
-                if step_id:
-                    async with async_session_maker() as s:
-                        for _ in range(20):
-                            await asyncio.sleep(0.5)
-                            st_res = await s.execute(select(TaskStep).where(TaskStep.id == step_id))
-                            step_record = st_res.scalar_one_or_none()
-                            if step_record:
-                                if step_record.status == "SUCCEEDED":
-                                    latency = int((time.time() - start_time) * 1000)
-                                    return ToolResponse(
-                                        success=True,
-                                        data=step_record.outputs or {},
-                                        metadata=ToolMetadata(latency_ms=latency),
-                                        verification_hints={"check": "host_bridge_acknowledged"},
-                                    )
-                                elif step_record.status == "FAILED":
-                                    err_info = step_record.error or {}
-                                    return ToolResponse(
-                                        success=False,
-                                        error=ToolError(
-                                            error_class=ErrorClass.TOOL_UNAVAILABLE,
-                                            message=err_info.get("message", "Desktop execution failed on host"),
-                                        ),
-                                    )
-            except Exception:
-                pass
+        # If direct HTTP is unreachable, wait for the local laptop's SARA Engine via Supabase bridge!
+        try:
+            import asyncio
+            from packages.core.db.session import async_session_maker
+            from packages.core.db.models import TaskStep
+            from sqlalchemy import select
 
+            step_id = request.context.step_id
+            if step_id:
+                async with async_session_maker() as s:
+                    for _ in range(35):
+                        await asyncio.sleep(0.5)
+                        st_res = await s.execute(select(TaskStep).where(TaskStep.id == step_id))
+                        step_record = st_res.scalar_one_or_none()
+                        if step_record:
+                            if step_record.status == "SUCCEEDED":
+                                latency = int((time.time() - start_time) * 1000)
+                                return ToolResponse(
+                                    success=True,
+                                    data=step_record.outputs or {},
+                                    metadata=ToolMetadata(latency_ms=latency),
+                                    verification_hints={"check": "host_bridge_acknowledged"},
+                                )
+                            elif step_record.status == "FAILED":
+                                err_info = step_record.error or {}
+                                return ToolResponse(
+                                    success=False,
+                                    error=ToolError(
+                                        error_class=ErrorClass.TOOL_UNAVAILABLE,
+                                        message=err_info.get("message", "Desktop execution failed on host"),
+                                    ),
+                                )
+        except Exception as bridge_err:
             return ToolResponse(
                 success=False,
-                error=ToolError(error_class=ErrorClass.TOOL_UNAVAILABLE, message=str(e))
+                error=ToolError(error_class=ErrorClass.TOOL_UNAVAILABLE, message=f"Cloud host bridge error: {bridge_err}")
             )
+
+        return ToolResponse(
+            success=False,
+            error=ToolError(error_class=ErrorClass.TOOL_UNAVAILABLE, message="Desktop execution timed out waiting for local SARA engine.")
+        )
 

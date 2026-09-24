@@ -337,6 +337,7 @@ class StepExecutionEngine:
         await self.idempotency_engine.complete(session, idempotency_key, response.data)
         step.status = "SUCCEEDED"
         step.outputs = response.data
+        step.error = None
         step.finished_at = datetime.now(timezone.utc)
 
         session.add(
