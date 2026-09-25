@@ -162,15 +162,20 @@ class IntentEngine:
             "latest", "update", "research"
         ]
         is_question = any(qw in lower_msg for qw in question_words)
+        has_action_intent = any(w in lower_msg for w in action_intent_words)
         
         # Any question or statement without explicit action verbs is conversational (deep thinking)
         is_conversational = (not req_caps) and (is_chat or is_question or (not has_action_intent))
+
+        entities = {"query": user_message}
+        if requested_app:
+            entities["app"] = requested_app
 
         return TaskClassification(
             is_conversational=is_conversational,
             path="SMART" if len(req_caps) > 1 else "FAST",
             goal=user_message[:100],
-            entities={"query": user_message},
+            entities=entities,
             required_capabilities=[] if is_conversational else req_caps,
             estimated_risk="HIGH" if any(w in lower_msg for w in ["send", "delete"]) else "LOW",
         )

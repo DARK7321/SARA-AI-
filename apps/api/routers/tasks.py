@@ -150,3 +150,37 @@ async def get_task(
         data=task_read,
         trace_id=getattr(request.state, "trace_id", None),
     )
+
+
+@router.post("/{task_id}/cancel", response_model=APIResponse)
+async def cancel_task(
+    task_id: UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Halt and cancel a running task and its remaining steps."""
+    result = await db.execute(
+        select(Task).where(Task.id == task_id).options(selectinload(Task.steps))
+    )
+    task = result.scalar_one_or_none()
+    if not task or task.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found",
+        )
+
+    task.status = "CANCELLED"
+    task.result = {"error": "Cancelled by user request"}
+    for step in task.steps:
+        if step.status in ("PLANNED", "EXECUTING"):
+            step.status = "CANCELLED"
+            step.error = {"message": "Cancelled by user request"}
+
+    await db.commit()
+    return APIResponse(
+        ok=True,
+        data={"task_id": str(task.id), "status": "CANCELLED", "message": "Task cancelled successfully."},
+        trace_id=getattr(request.state, "trace_id", None),
+    )
+

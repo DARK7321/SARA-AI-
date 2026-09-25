@@ -136,7 +136,8 @@ export async function sendChatMessageStream(
   message: string,
   onEvent: ChatStreamCallback,
   includeAudio = true,
-  voice = "auto"
+  voice = "auto",
+  signal?: AbortSignal
 ): Promise<void> {
   const headers = await getAuthHeaders();
   
@@ -144,6 +145,7 @@ export async function sendChatMessageStream(
     const res = await fetch(`${API_BASE}/v1/chat/stream`, {
       method: "POST",
       headers,
+      signal,
       body: JSON.stringify({
         message,
         include_audio: includeAudio,
@@ -154,7 +156,7 @@ export async function sendChatMessageStream(
     if (res.status === 401) {
       logout();
       await login();
-      return sendChatMessageStream(message, onEvent, includeAudio, voice);
+      return sendChatMessageStream(message, onEvent, includeAudio, voice, signal);
     }
 
     if (!res.ok) {
@@ -182,7 +184,6 @@ export async function sendChatMessageStream(
         if (line.startsWith("data: ")) {
           const dataStr = line.slice(6);
           if (dataStr.trim() === "[DONE]") {
-            // Standard SSE termination (if backend sends it)
             continue;
           }
           try {
@@ -204,9 +205,39 @@ export async function sendChatMessageStream(
     }
     
   } catch (err: any) {
+    if (err.name === "AbortError") {
+      onEvent({ type: "status", content: "🛑 Task cancelled by user" });
+      return;
+    }
     console.error("Chat streaming error:", err);
     onEvent({ type: "error", content: err.message });
   }
+}
+
+export async function cancelTask(taskId: string): Promise<boolean> {
+  try {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/v1/tasks/${taskId}/cancel`, {
+      method: "POST",
+      headers,
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function emergencyHalt(reason = "Emergency Stop triggered by user"): Promise<boolean> {
+  let ok = false;
+  try {
+    ok = await toggleKillSwitch(true, reason);
+  } catch (e) {
+    console.error("toggleKillSwitch error:", e);
+  }
+  try {
+    await fetch("http://127.0.0.1:8000/api/stop", { method: "POST" });
+  } catch {}
+  return ok;
 }
 
 export async function fetchTasks(limit = 10): Promise<any[]> {

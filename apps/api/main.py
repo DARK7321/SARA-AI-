@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="OmniBrain API",
-    version="0.2.0-websearch-fix",
+    version="0.3.0-task-stop",
     docs_url="/docs",
     lifespan=lifespan,
 )
@@ -82,6 +82,6 @@ async def root(request: Request):
     """Root endpoint welcoming user and reporting API version."""
     return APIResponse(
         ok=True,
-        data={"message": "Welcome to OmniBrain", "version": "0.2.0-websearch-fix"},
+        data={"message": "Welcome to OmniBrain", "version": "0.3.0-task-stop"},
         trace_id=getattr(request.state, "trace_id", None),
     )

@@ -126,14 +126,14 @@ async def execute_task_job(
             if step.status in ("SUCCEEDED", "SKIPPED"):
                 continue
 
-            # Check Kill Switch mid-execution
-            if await emergency_kill_switch.is_active():
-                step.status = "FAILED"
-                step.result = {"error": "Emergency Kill Switch activated during execution."}
-                task.status = "FAILED"
-                task.result = {"error": "Emergency Kill Switch activated mid-flight."}
+            # Check Kill Switch or task cancellation mid-execution
+            if await emergency_kill_switch.is_active() or task.status in ("CANCELLED", "FAILED"):
+                step.status = "SKIPPED" if task.status == "CANCELLED" else "FAILED"
+                step.result = {"error": "Emergency Stop or cancellation active."}
+                task.status = "CANCELLED" if task.status == "CANCELLED" else "FAILED"
+                task.result = {"error": "Halted mid-flight upon stop request."}
                 await s.flush()
-                return {"status": "failed", "error": "Emergency Kill Switch active mid-flight"}
+                return {"status": "cancelled", "error": "Task stopped mid-flight"}
 
             # Acquire step lease
             now = datetime.now(timezone.utc)
