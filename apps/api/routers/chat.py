@@ -122,69 +122,9 @@ async def chat_with_brain(
         selected_voice = DEFAULT_HINGLISH_VOICE
 
     voice_engine = VoiceEngine(default_voice=selected_voice)
+
+    # 0. Fast-Path Natural Language Alias Check (Zero-Latency, ₹0 LLM Cost)
     clean_msg = payload.message.strip().lower()
-
-    # 0. Emergency Stop / Halt Check (<1ms response, halts running tasks immediately)
-    stop_phrases = (
-        "stop", "ruko", "ruk jao", "cancel", "halt", "abort", "band karo",
-        "stop karo", "task stop karo", "task cancel karo", "stop task", "cancel task",
-        "sara stop", "sara ruko", "sara ruk jao", "s.a.r.a. stop", "s.a.r.a. ruko"
-    )
-    if clean_msg in stop_phrases or any(clean_msg == f"sara {sp}" or clean_msg == f"{sp} sara" for sp in ("stop", "ruko", "cancel", "halt")):
-        from packages.core.safety.kill_switch import emergency_kill_switch
-        await emergency_kill_switch.activate(reason=f"User stop command: {payload.message}", triggered_by=current_user.email)
-
-        # Cancel all active tasks in DB
-        active_tasks = await db.execute(
-            select(Task).where(
-                Task.user_id == current_user.id,
-                Task.status.in_(["PLANNED", "RUNNING", "WAITING_APPROVAL", "EXECUTING"])
-            )
-        )
-        for t in active_tasks.scalars().all():
-            t.status = "CANCELLED"
-            t.result = {"error": "Halted immediately by user stop command"}
-        await db.commit()
-
-        reply_text = (
-            "Haan ji Vikas ji, maine chal rahe task ko turant STOP kar diya hai! Sabhi operations halt ho gayi hain."
-            if has_hindi
-            else "Task execution halted immediately. All actions have been stopped."
-        )
-
-        audio_base64 = None
-        if payload.include_audio:
-            try:
-                audio_base64 = await voice_engine.synthesize_to_base64(reply_text)
-            except Exception:
-                pass
-
-        report = StructuredReport(
-            status="CANCELLED",
-            what_was_done=["Emergency Stop triggered by user"],
-            important_results=["All operations halted immediately"],
-            any_problems=["Task halted mid-flight upon user request"],
-            actions_requiring_me=[],
-            spoken_summary=reply_text,
-        )
-
-        return APIResponse(
-            ok=True,
-            data=ChatResponseData(
-                reply=reply_text,
-                path="FAST",
-                report=report,
-                audio_base64=audio_base64,
-            ),
-            trace_id=trace_id,
-        )
-
-    # Auto-resume from emergency kill switch if a new valid request is sent
-    from packages.core.safety.kill_switch import emergency_kill_switch
-    if await emergency_kill_switch.is_active():
-        await emergency_kill_switch.deactivate(actor=current_user.email)
-
-    # 0.1 Fast-Path Natural Language Alias Check (Zero-Latency, ₹0 LLM Cost)
     target_wf_keyword = None
 
     if clean_msg in ("morning", "briefing", "morning briefing", "morning brief", "standup"):
@@ -548,59 +488,6 @@ async def chat_stream(
 
     async def event_generator():
         """Async generator that yields SSE events."""
-        # 0. Emergency Stop / Halt Check
-        stop_phrases = (
-            "stop", "ruko", "ruk jao", "cancel", "halt", "abort", "band karo",
-            "stop karo", "task stop karo", "task cancel karo", "stop task", "cancel task",
-            "sara stop", "sara ruko", "sara ruk jao", "s.a.r.a. stop", "s.a.r.a. ruko"
-        )
-        if clean_msg in stop_phrases or any(clean_msg == f"sara {sp}" or clean_msg == f"{sp} sara" for sp in ("stop", "ruko", "cancel", "halt")):
-            from packages.core.safety.kill_switch import emergency_kill_switch
-            await emergency_kill_switch.activate(reason=f"User stop command: {payload.message}", triggered_by=current_user.email)
-
-            active_tasks = await db.execute(
-                select(Task).where(
-                    Task.user_id == current_user.id,
-                    Task.status.in_(["PLANNED", "RUNNING", "WAITING_APPROVAL", "EXECUTING"])
-                )
-            )
-            for t in active_tasks.scalars().all():
-                t.status = "CANCELLED"
-                t.result = {"error": "Halted immediately by user stop command"}
-            await db.commit()
-
-            reply_text = (
-                "Haan ji Vikas ji, maine chal rahe task ko turant STOP kar diya hai! Sabhi operations halt ho gayi hain."
-                if has_hindi
-                else "Task execution halted immediately. All actions have been stopped."
-            )
-            yield _sse_event("status", "🛑 Stopped")
-            yield _sse_event("token", reply_text)
-
-            report = StructuredReport(
-                status="CANCELLED",
-                what_was_done=["Emergency Stop triggered by user"],
-                important_results=["All operations halted immediately"],
-                any_problems=["Task halted mid-flight upon user request"],
-                actions_requiring_me=[],
-                spoken_summary=reply_text,
-            )
-            yield _sse_event("report", report.model_dump())
-            if payload.include_audio:
-                try:
-                    audio_b64 = await voice_engine.synthesize_to_base64(reply_text)
-                    if audio_b64:
-                        yield _sse_event("audio", {"audio_base64": audio_b64})
-                except Exception:
-                    pass
-            yield _sse_event("done", {"task_id": None, "path": "FAST"})
-            return
-
-        # Auto-resume from emergency kill switch if a new valid request is sent
-        from packages.core.safety.kill_switch import emergency_kill_switch
-        if await emergency_kill_switch.is_active():
-            await emergency_kill_switch.deactivate(actor=current_user.email)
-
         # 1. Classify intent (instant via fast-path, shared singleton)
         classification = await get_intent_engine().classify(
             user_message=payload.message,

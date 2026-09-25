@@ -118,13 +118,13 @@ class HostAgentConnector(BaseConnector):
                                     metadata=ToolMetadata(latency_ms=latency),
                                     verification_hints={"check": "host_bridge_acknowledged"},
                                 )
-                            elif step_record.status == "FAILED":
+                            elif step_record.status in ("FAILED", "CANCELLED"):
                                 err_info = step_record.error or {}
                                 return ToolResponse(
                                     success=False,
                                     error=ToolError(
                                         error_class=ErrorClass.TOOL_UNAVAILABLE,
-                                        message=err_info.get("message", "Desktop execution failed on host"),
+                                        message=err_info.get("message", f"Desktop execution {step_record.status.lower()} on host"),
                                     ),
                                 )
         except Exception as bridge_err:

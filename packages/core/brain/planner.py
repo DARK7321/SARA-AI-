@@ -127,9 +127,24 @@ class DAGPlanner:
                 step_inputs["text"] = classification.entities.get("text") or step_inputs.get("text") or classification.goal
                 step_inputs["press_enter"] = False
             elif cap == "host.keyboard_control":
-                step_inputs.setdefault("action", classification.entities.get("action", "press"))
-                for k in ["keys", "text"]:
-                    if k in classification.entities: step_inputs[k] = classification.entities[k]
+                action = classification.entities.get("action") or step_inputs.get("action", "press")
+                keys = classification.entities.get("keys") or step_inputs.get("keys")
+                goal_lower = classification.goal.lower()
+                if not keys:
+                    if any(w in goal_lower for w in ["minimize", "minimise", "desktop"]):
+                        action = "hotkey"
+                        keys = ["win", "m"]
+                    elif any(w in goal_lower for w in ["close window", "band karo"]):
+                        action = "hotkey"
+                        keys = ["alt", "f4"]
+                    elif any(w in goal_lower for w in ["close tab", "close tabs"]):
+                        action = "hotkey"
+                        keys = ["ctrl", "shift", "w"]
+                step_inputs["action"] = action
+                if keys:
+                    step_inputs["keys"] = keys
+                if "text" in classification.entities:
+                    step_inputs["text"] = classification.entities["text"]
 
             step_plan = StepPlan(
                 step_key=step_key,

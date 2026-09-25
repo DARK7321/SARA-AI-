@@ -142,10 +142,25 @@ class IntentEngine:
             req_caps.append("calendar.list_events")
         if any(w in lower_msg for w in ["sheet", "spreadsheet", "शीट"]):
             req_caps.append("sheets.read_rows")
-        if any(w in lower_msg for w in ["drive", "file", "doc", "ड्राइव", "फाइल"]):
-            req_caps.append("drive.list")
-        if requested_app or any(w in lower_msg for w in ["excel", "word", "chrome", "app", "window"]):
+        entities = {"query": user_message}
+        if requested_app:
+            entities["app"] = requested_app
+
+        if any(w in lower_msg for w in ["minimize", "minimise", "chota karo", "desktop"]):
+            req_caps.append("host.keyboard_control")
+            entities["action"] = "hotkey"
+            entities["keys"] = ["win", "m"]
+        elif any(w in lower_msg for w in ["close window", "band karo"]):
+            req_caps.append("host.keyboard_control")
+            entities["action"] = "hotkey"
+            entities["keys"] = ["alt", "f4"]
+        elif any(w in lower_msg for w in ["close tab", "close tabs"]):
+            req_caps.append("host.keyboard_control")
+            entities["action"] = "hotkey"
+            entities["keys"] = ["ctrl", "shift", "w"]
+        elif requested_app or any(w in lower_msg for w in ["excel", "word", "chrome", "app"]):
             req_caps.append("host.open_app")
+
         if any(w in lower_msg for w in ["type", "write", "likho", "टाइप", "लिखो"]):
             req_caps.extend(["host.type_text", "host.read_screen"])
 
@@ -166,10 +181,6 @@ class IntentEngine:
         
         # Any question or statement without explicit action verbs is conversational (deep thinking)
         is_conversational = (not req_caps) and (is_chat or is_question or (not has_action_intent))
-
-        entities = {"query": user_message}
-        if requested_app:
-            entities["app"] = requested_app
 
         return TaskClassification(
             is_conversational=is_conversational,
