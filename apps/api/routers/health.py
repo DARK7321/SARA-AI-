@@ -16,7 +16,7 @@ async def health_check(request: Request):
     """Liveness check — API is up."""
     return APIResponse(
         ok=True, 
-        data={"status": "healthy", "service": "omnibrain-api", "version": "0.1.0"},
+        data={"status": "healthy", "service": "omnibrain-api", "version": "0.2.0-websearch-fix"},
         trace_id=getattr(request.state, "trace_id", None),
     )
 

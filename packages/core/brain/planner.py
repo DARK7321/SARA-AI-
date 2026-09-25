@@ -123,8 +123,8 @@ class DAGPlanner:
                 for k in ["x", "y", "scroll_amount"]:
                     if k in classification.entities: step_inputs[k] = classification.entities[k]
             elif cap == "host.type_text":
-                step_inputs["app"] = classification.entities.get("app", "notepad")
-                step_inputs["text"] = classification.entities.get("text", classification.goal)
+                step_inputs["app"] = classification.entities.get("app") or step_inputs.get("app", "notepad")
+                step_inputs["text"] = classification.entities.get("text") or step_inputs.get("text") or classification.goal
                 step_inputs["press_enter"] = False
             elif cap == "host.keyboard_control":
                 step_inputs.setdefault("action", classification.entities.get("action", "press"))
