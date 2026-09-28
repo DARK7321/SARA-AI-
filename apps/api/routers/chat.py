@@ -625,6 +625,9 @@ async def chat_stream(
 
             await db.commit()
 
+            # Emit task_created immediately so frontend DAG visualizer can display the task in real time
+            yield _sse_event("task_created", task_id=str(task.id))
+
             # Execute and stream progress
             for i, step_plan in enumerate(dag_plan.steps, 1):
                 yield _sse_event("progress", f"Step {i}/{len(dag_plan.steps)}: {step_plan.capability}", step=i, total=len(dag_plan.steps))

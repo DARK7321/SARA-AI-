@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { Send, Mic, Square, Volume2, Bot, User, CheckCircle, AlertTriangle, Clock, ShieldAlert } from "lucide-react";
-import { sendChatMessageStream, ChatResponse } from "@/lib/api";
+import { sendChatMessageStream, ChatResponse, emergencyHalt } from "@/lib/api";
 import { playBase64Audio, stopAudio, subscribeSpeaking } from "@/lib/audio";
 
 interface MessageItem {
@@ -39,6 +39,44 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const [isListening, setIsListening] = useState(false);
   const [streamStatus, setStreamStatus] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const handleStopTask = async () => {
+    // 1. Abort network SSE stream immediately
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    // 2. Stop audio playback immediately
+    stopAudio();
+
+    // 3. Trigger emergency kill switch and local stop
+    emergencyHalt("Task stopped by user via Stop button");
+
+    setIsLoading(false);
+    setStreamStatus(null);
+
+    // 4. Log stop in chat feed
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `stop_${Date.now()}`,
+        sender: "friday",
+        text: "🛑 **Task Stopped**: Maine chal rahe task ko turant STOP kar diya hai. Saari operations halt ho gayi hain.",
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      },
+    ]);
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        handleStopTask();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   useEffect(() => {
     const unsubscribe = subscribeSpeaking((speaking) => {
@@ -79,6 +117,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     setInputText("");
     setIsLoading(true);
     setStreamStatus(null);
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     // Resume local host engine in case it was halted
     try {
@@ -127,9 +168,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             if (!isVoiceMuted && finalAudioBase64) {
               playBase64Audio(finalAudioBase64);
             }
+          } else if (event.type === "task_created") {
+            if (event.task_id && onTaskCreated) {
+              onTaskCreated(event.task_id);
+            }
           } else if (event.type === "done") {
             setIsLoading(false);
             setStreamStatus(null);
+            abortControllerRef.current = null;
             if (event.task_id && onTaskCreated) {
               onTaskCreated(event.task_id);
             }
@@ -143,12 +189,20 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             );
             setIsLoading(false);
             setStreamStatus(null);
+            abortControllerRef.current = null;
           }
         },
         !isVoiceMuted,
-        selectedVoice
+        selectedVoice,
+        abortController.signal
       );
-    } catch (err) {
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        setIsLoading(false);
+        setStreamStatus(null);
+        abortControllerRef.current = null;
+        return;
+      }
       console.error("Failed to send message:", err);
       setMessages((prev) => 
         prev.map((msg) => 
@@ -159,6 +213,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       );
       setIsLoading(false);
       setStreamStatus(null);
+      abortControllerRef.current = null;
     }
   };
 
@@ -222,15 +277,27 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           </div>
         </div>
 
-        {isSpeaking && (
-          <button
-            onClick={stopAudio}
-            className="flex items-center space-x-1.5 px-3 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-semibold animate-pulse transition-all"
-          >
-            <Square className="w-3 h-3 fill-rose-300" />
-            <span>Stop Speaking (Esc)</span>
-          </button>
-        )}
+        <div className="flex items-center space-x-2">
+          {(isLoading || isSpeaking) ? (
+            <button
+              onClick={handleStopTask}
+              className="flex items-center space-x-2 px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/40 animate-pulse transition-all cursor-pointer border border-rose-400"
+              title="Press Esc or click to stop task immediately"
+            >
+              <Square className="w-3.5 h-3.5 fill-white" />
+              <span>🛑 STOP TASK (Esc)</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleStopTask}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-rose-950/60 text-slate-400 hover:text-rose-300 border border-slate-700/60 hover:border-rose-500/40 text-xs font-semibold transition-all cursor-pointer"
+              title="Emergency Stop (Esc)"
+            >
+              <Square className="w-3 h-3 fill-slate-400" />
+              <span>🛑 Stop (Esc)</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Message Feed */}
@@ -400,14 +467,25 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           className="flex-1 bg-slate-900/90 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none focus:border-cyan-500/50 transition-all"
         />
 
-        <button
-          onClick={() => handleSend()}
-          disabled={isLoading || !inputText.trim()}
-          className="bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 px-4 py-2.5 rounded-xl font-semibold text-sm flex items-center space-x-1.5 transition-all shadow-lg shadow-cyan-500/20"
-        >
-          <span>Send</span>
-          <Send className="w-3.5 h-3.5" />
-        </button>
+        {isLoading ? (
+          <button
+            onClick={handleStopTask}
+            className="bg-rose-600 hover:bg-rose-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm flex items-center space-x-1.5 transition-all shadow-lg shadow-rose-600/30 animate-pulse cursor-pointer border border-rose-400"
+            title="Stop running task (Esc)"
+          >
+            <Square className="w-3.5 h-3.5 fill-white" />
+            <span>STOP</span>
+          </button>
+        ) : (
+          <button
+            onClick={() => handleSend()}
+            disabled={!inputText.trim()}
+            className="bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 px-4 py-2.5 rounded-xl font-semibold text-sm flex items-center space-x-1.5 transition-all shadow-lg shadow-cyan-500/20"
+          >
+            <span>Send</span>
+            <Send className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
     </div>
   );

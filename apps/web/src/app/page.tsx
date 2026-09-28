@@ -17,6 +17,7 @@ export default function Home() {
   const [isVoiceMuted, setIsVoiceMuted] = useState(false);
   const [selectedVoice, setSelectedVoice] = useState("auto");
   const [selectedTaskId, setSelectedTaskId] = useState<string | undefined>();
+  const [taskEventTimestamp, setTaskEventTimestamp] = useState<number>(0);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
 
   return (
@@ -39,11 +40,17 @@ export default function Home() {
               <ChatPanel
                 isVoiceMuted={isVoiceMuted}
                 selectedVoice={selectedVoice}
-                onTaskCreated={(id) => setSelectedTaskId(id)}
+                onTaskCreated={(id) => {
+                  setSelectedTaskId(id);
+                  setTaskEventTimestamp(Date.now());
+                }}
               />
             </div>
             <div className="lg:col-span-5 h-full min-h-0">
-              <DAGVisualizer selectedTaskId={selectedTaskId} />
+              <DAGVisualizer
+                selectedTaskId={selectedTaskId}
+                taskEventTimestamp={taskEventTimestamp}
+              />
             </div>
           </div>
         )}
