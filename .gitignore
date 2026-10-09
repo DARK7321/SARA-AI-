@@ -18,3 +18,5 @@ htmlcov/
 .idea/
 .vscode/settings.json
 data/
+.agents/
+.archify/

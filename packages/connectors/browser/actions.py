@@ -126,6 +126,10 @@ class BrowserActions:
         inputs: Dict[str, Any],
         force_sandbox: bool = False,
     ) -> Any:
+        if action in ("browser.search", "browser.search_images", "browser.open", "browser.navigate"):
+            from packages.core.browser.actions import execute_browser_action
+            return await execute_browser_action(action, inputs)
+
         if action != "browser.extract_content":
             raise ValueError(f"Unsupported Browser action: {action}")
 

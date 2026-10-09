@@ -8,3 +8,7 @@
 - For manual GUI interaction, always plan host.read_screen with include_bounding_boxes=true BEFORE using host.mouse_control so you know the EXACT (X, Y) coordinates to click or move to.
 - Use host.keyboard_control to send shortcuts (hotkey action) or raw text (write action).
 - Never use host.type_text anymore; use host.keyboard_control instead.
+- For searching information, topics, or images in Chrome/browser, NEVER plan blind host.keyboard_control. Always plan browser.search (or browser.search_images) with the extracted query.
+- When the command requires opening Chrome and searching, plan:
+  Step 1: host.open_app (app: "chrome")
+  Step 2: browser.search (or browser.search_images) with inputs {"query": "<search query>"} and depends_on: ["step_1_host_open_app"].

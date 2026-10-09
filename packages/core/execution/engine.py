@@ -237,6 +237,9 @@ class StepExecutionEngine:
             dry_run=dry_run,
         )
 
+        # Commit session so PostgreSQL row locks are released before waiting on connector execution
+        await session.commit()
+
         attempt = 0
         response: Optional[ToolResponse] = None
 

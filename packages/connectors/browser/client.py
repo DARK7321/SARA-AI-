@@ -83,6 +83,10 @@ class BrowserConnector(BaseConnector):
     def get_capabilities(self) -> List[str]:
         return [
             "browser.extract_content",
+            "browser.open",
+            "browser.search",
+            "browser.search_images",
+            "browser.navigate",
         ]
 
     async def verify(
@@ -93,4 +97,6 @@ class BrowserConnector(BaseConnector):
     ) -> bool:
         if action == "browser.extract_content":
             return bool(result and (result.get("content") or result.get("title")))
+        if action in ("browser.search", "browser.search_images", "browser.open"):
+            return bool(result and result.get("success", False))
         return True
